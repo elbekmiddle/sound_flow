@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { @apply h-full; }
+  body { @apply bg-background text-on-surface font-body overflow-hidden; }
+
+  ::-webkit-scrollbar        { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { @apply bg-surface-container-highest rounded-full; }
+
+  * { box-sizing: border-box; }
+}
+
+@layer components {
+  /* ── Glass surface ─────────────────────── */
+  .glass {
+    background: rgba(26, 25, 25, 0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  /* ── Skeleton loader ───────────────────── */
+  .skeleton {
+    @apply rounded-lg;
+    background: linear-gradient(
+      90deg,
+      theme('colors.surface-container')    25%,
+      theme('colors.surface-container-high') 50%,
+      theme('colors.surface-container')    75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* ── Range input: progress bar ─────────── */
+  .range-progress {
+    @apply appearance-none h-1 rounded-full cursor-pointer outline-none;
+    background: linear-gradient(
+      to right,
+      theme('colors.primary') var(--pct, 0%),
+      theme('colors.surface-container-highest') var(--pct, 0%)
+    );
+    transition: height 0.15s;
+  }
+  .range-progress:hover { height: 5px; }
+  .range-progress::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: theme('colors.primary');
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .range-progress:hover::-webkit-slider-thumb { transform: scale(1.4); }
+
+  /* ── Range input: volume ───────────────── */
+  .range-volume {
+    @apply appearance-none h-1 rounded-full cursor-pointer outline-none;
+    background: linear-gradient(
+      to right,
+      theme('colors.on-surface-variant') var(--vol, 70%),
+      theme('colors.surface-container-highest') var(--vol, 70%)
+    );
+  }
+  .range-volume::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px; height: 10px;
+    background: theme('colors.on-surface-variant');
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  /* ── Nav item ──────────────────────────── */
+  .nav-btn {
+    @apply flex items-center gap-3.5 px-3 py-2.5 rounded
+           text-on-surface-variant hover:text-on-surface
+           hover:bg-surface-container transition-all text-sm w-full;
+  }
+  .nav-btn.active {
+    @apply text-primary font-bold;
+  }
+
+  /* ── Track row ─────────────────────────── */
+  .track-row {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded cursor-pointer
+           hover:bg-surface-container transition-all group;
+  }
+
+  /* ── Card ──────────────────────────────── */
+  .card {
+    @apply bg-surface-container rounded-lg transition-all duration-200
+           hover:-translate-y-1 hover:bg-surface-container-high cursor-pointer;
+  }
+
+  /* ── Filter chip ───────────────────────── */
+  .chip {
+    @apply px-4 py-1.5 rounded-full text-sm font-semibold transition-all cursor-pointer;
+  }
+  .chip.active { @apply bg-primary text-on-primary; }
+  .chip:not(.active) { @apply bg-surface-container-high text-on-surface-variant hover:bg-surface-bright; }
+
+  /* ── Icon button ───────────────────────── */
+  .icon-btn {
+    @apply text-on-surface-variant hover:text-on-surface transition-colors
+           flex items-center justify-center;
+  }
+  .icon-btn.active { @apply text-primary; }
+}
+
+/* ── no-scrollbar ──────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

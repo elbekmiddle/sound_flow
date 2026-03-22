@@ -3,217 +3,128 @@ import { musicApi, historyApi, libraryApi } from '../api/client.js';
 import toast from 'react-hot-toast';
 
 let audioEl = null;
-
-function getAudio() {
-  if (!audioEl) {
-    audioEl = new Audio();
-    audioEl.preload = 'metadata';
-  }
+function audio() {
+  if (!audioEl) { audioEl = new Audio(); audioEl.preload = 'metadata'; }
   return audioEl;
 }
 
 const usePlayerStore = create((set, get) => ({
-  // ── State ────────────────────────────────────────────────
   currentTrack: null,
   queue:        [],
   queueIndex:   0,
   isPlaying:    false,
   isLoading:    false,
   shuffle:      false,
-  repeat:       'none',   // 'none' | 'all' | 'one'
-  volume:       0.7,
-  progress:     0,        // 0–100
+  repeat:       'none',
+  volume:       0.75,
+  progress:     0,
   currentTime:  0,
   duration:     0,
   liked:        new Set(),
 
-  // ── Init audio listeners ─────────────────────────────────
   initListeners: () => {
-    const audio = getAudio();
-
-    audio.ontimeupdate = () => {
-      if (!audio.duration) return;
-      set({
-        currentTime: audio.currentTime,
-        duration:    audio.duration,
-        progress:    (audio.currentTime / audio.duration) * 100,
-      });
+    const a = audio();
+    a.ontimeupdate = () => {
+      if (!a.duration) return;
+      set({ currentTime: a.currentTime, duration: a.duration, progress: (a.currentTime / a.duration) * 100 });
     };
-
-    audio.onended = () => {
-      const { repeat, shuffle, queue, queueIndex } = get();
-      if (repeat === 'one') {
-        audio.currentTime = 0;
-        audio.play();
-      } else if (repeat === 'all' || queueIndex < queue.length - 1) {
-        get().next();
-      } else {
-        set({ isPlaying: false });
-      }
+    a.onended = () => {
+      const { repeat, queue, queueIndex } = get();
+      if (repeat === 'one') { a.currentTime = 0; a.play(); }
+      else if (repeat === 'all' || queueIndex < queue.length - 1) get().next();
+      else set({ isPlaying: false });
     };
-
-    audio.onloadstart = () => set({ isLoading: true });
-    audio.oncanplay  = () => set({ isLoading: false });
-    audio.onerror    = () => {
-      set({ isLoading: false, isPlaying: false });
-      toast.error('Failed to load track');
-    };
+    a.onloadstart = () => set({ isLoading: true });
+    a.oncanplay   = () => set({ isLoading: false });
+    a.onerror     = () => { set({ isLoading: false, isPlaying: false }); toast.error('Failed to load track'); };
   },
 
-  // ── Play a track ─────────────────────────────────────────
-  play: async (track, queue = [], startIndex = null) => {
-    const audio = getAudio();
-
-    // If same track — just toggle
-    if (get().currentTrack?.id === track.id && audio.src) {
-      return get().togglePlay();
-    }
-
-    const idx = startIndex ?? queue.findIndex(t => t.id === track.id);
-    set({
-      currentTrack: track,
-      queue,
-      queueIndex:   Math.max(idx, 0),
-      isLoading:    true,
-      isPlaying:    false,
-      progress:     0,
-      currentTime:  0,
-    });
-
-    const streamUrl = musicApi.streamUrl(track.id);
-    audio.src = streamUrl;
-    audio.volume = get().volume;
-
+  play: async (track, queue = [], startIdx = null) => {
+    const a = audio();
+    if (get().currentTrack?.id === track.id && a.src) return get().togglePlay();
+    const idx = startIdx ?? Math.max(queue.findIndex(t => t.id === track.id), 0);
+    set({ currentTrack: track, queue, queueIndex: idx, isLoading: true, isPlaying: false, progress: 0, currentTime: 0 });
+    a.src = musicApi.streamUrl(track.id);
+    a.volume = get().volume;
     try {
-      await audio.play();
+      await a.play();
       set({ isPlaying: true });
-
-      // Preload next track
-      const nextIdx = (Math.max(idx, 0) + 1) % Math.max(queue.length, 1);
-      if (queue[nextIdx] && queue[nextIdx].id !== track.id) {
-        const preload = new Audio();
-        preload.preload = 'metadata';
-        preload.src = musicApi.streamUrl(queue[nextIdx].id);
+      // Preload next
+      const ni = (idx + 1) % Math.max(queue.length, 1);
+      if (queue[ni]?.id !== track.id) {
+        const pre = new Audio(); pre.preload = 'metadata'; pre.src = musicApi.streamUrl(queue[ni].id);
       }
-
-      // Save to history (fire and forget)
-      historyApi.add({
-        youtubeId:  track.id,
-        title:      track.title,
-        artist:     track.artist,
-        duration:   track.duration,
-        thumbnail:  track.thumbnail,
-        deviceType: 'web',
-      }).catch(() => {});
-
-    } catch (err) {
-      set({ isLoading: false, isPlaying: false });
-    }
+      historyApi.add({ youtubeId: track.id, title: track.title, artist: track.artist, duration: track.duration, thumbnail: track.thumbnail, deviceType: 'web' }).catch(() => {});
+    } catch { set({ isLoading: false, isPlaying: false }); }
   },
 
   togglePlay: () => {
-    const audio = getAudio();
+    const a = audio();
     if (!get().currentTrack) return;
-
-    if (get().isPlaying) {
-      audio.pause();
-      set({ isPlaying: false });
-    } else {
-      audio.play().then(() => set({ isPlaying: true })).catch(() => {});
-    }
+    if (get().isPlaying) { a.pause(); set({ isPlaying: false }); }
+    else { a.play().then(() => set({ isPlaying: true })).catch(() => {}); }
   },
 
   next: () => {
     const { queue, queueIndex, shuffle } = get();
     if (!queue.length) return;
-
-    let nextIdx;
-    if (shuffle) {
-      do { nextIdx = Math.floor(Math.random() * queue.length); }
-      while (queue.length > 1 && nextIdx === queueIndex);
-    } else {
-      nextIdx = (queueIndex + 1) % queue.length;
-    }
-
-    get().play(queue[nextIdx], queue, nextIdx);
+    let ni = shuffle ? Math.floor(Math.random() * queue.length) : (queueIndex + 1) % queue.length;
+    get().play(queue[ni], queue, ni);
   },
 
   prev: () => {
     const { queue, queueIndex } = get();
-    const audio = getAudio();
-
-    // If >3s in, restart current track
-    if (audio.currentTime > 3) {
-      audio.currentTime = 0;
-      return;
-    }
-
-    const prevIdx = (queueIndex - 1 + queue.length) % queue.length;
-    if (queue[prevIdx]) get().play(queue[prevIdx], queue, prevIdx);
+    const a = audio();
+    if (a.currentTime > 3) { a.currentTime = 0; return; }
+    const pi = (queueIndex - 1 + queue.length) % queue.length;
+    if (queue[pi]) get().play(queue[pi], queue, pi);
   },
 
   seek: (pct) => {
-    const audio = getAudio();
-    if (audio.duration) {
-      audio.currentTime = (pct / 100) * audio.duration;
-      set({ progress: pct });
-    }
+    const a = audio();
+    if (a.duration) { a.currentTime = (pct / 100) * a.duration; set({ progress: pct }); }
   },
 
-  setVolume: (vol) => {
-    getAudio().volume = vol;
-    set({ volume: vol });
-  },
+  setVolume: (v) => { audio().volume = v; set({ volume: v }); },
 
   toggleShuffle: () => {
-    set(s => ({ shuffle: !s.shuffle }));
-    toast(get().shuffle ? '🔀 Shuffle on' : 'Shuffle off', { icon: '🔀' });
+    const next = !get().shuffle;
+    set({ shuffle: next });
+    toast(next ? '🔀 Shuffle on' : 'Shuffle off');
   },
 
   toggleRepeat: () => {
-    const modes = ['none', 'all', 'one'];
-    const next = modes[(modes.indexOf(get().repeat) + 1) % 3];
+    const map = { none: 'all', all: 'one', one: 'none' };
+    const next = map[get().repeat];
     set({ repeat: next });
-    const labels = { none: 'Repeat off', all: 'Repeat all', one: 'Repeat one' };
-    toast(labels[next]);
+    toast({ none: 'Repeat off', all: 'Repeat all', one: 'Repeat one' }[next]);
   },
 
-  // ── Like / Unlike ────────────────────────────────────────
   toggleLike: async () => {
     const track = get().currentTrack;
     if (!track) return;
-
-    const wasLiked = get().liked.has(track.id);
-    const newLiked = new Set(get().liked);
-
-    if (wasLiked) {
-      newLiked.delete(track.id);
-      set({ liked: newLiked });
-      await libraryApi.unlikeTrack(track.id).catch(() => {});
+    const id = track.id;
+    const liked = new Set(get().liked);
+    if (liked.has(id)) {
+      liked.delete(id); set({ liked });
+      await libraryApi.unlikeTrack(id).catch(() => {});
       toast('Removed from liked songs');
     } else {
-      newLiked.add(track.id);
-      set({ liked: newLiked });
-      await libraryApi.likeTrack(track.id, {
-        title: track.title, artist: track.artist,
-        duration: track.duration, thumbnail: track.thumbnail,
-      }).catch(() => {});
+      liked.add(id); set({ liked });
+      await libraryApi.likeTrack(id, { title: track.title, artist: track.artist, duration: track.duration, thumbnail: track.thumbnail }).catch(() => {});
       toast.success('Added to liked songs ♥');
     }
   },
 
   setLiked: (ids) => set({ liked: new Set(ids) }),
+  isLiked:  (id) => get().liked.has(id),
 
-  isLiked: (id) => get().liked.has(id),
-
-  // ── Queue management ─────────────────────────────────────
   addToQueue: (track) => {
-    const q = [...get().queue, track];
-    set({ queue: q });
-    toast(`Added to queue: ${track.title}`);
+    set({ queue: [...get().queue, track] });
+    toast(`Added "${track.title}" to queue`);
   },
 
-  clearQueue: () => set({ queue: [], currentTrack: null }),
+  clearQueue: () => { audio().pause(); audio().src = ''; set({ queue: [], currentTrack: null, isPlaying: false }); },
 }));
 
 export default usePlayerStore;

@@ -1,276 +1,223 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Play, Heart, MoreHorizontal, ListMusic, Youtube, Check, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import usePlayerStore from '../store/playerStore.js';
 import { playlistApi } from '../api/client.js';
 
-/* ── Equalizer animation bars (shown when track is active) ── */
+/* ── Eq animation bars ──────────────────────── */
 function EqBars() {
   return (
-    <div className="flex items-end gap-[2px] h-4">
-      {[1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="w-[3px] rounded-sm origin-bottom"
-          style={{
-            background: 'var(--color-primary)',
-            animation: `bar-eq 0.8s ease-in-out infinite ${(i - 1) * 0.15}s`,
-            height: `${[8, 14, 10][i - 1]}px`,
-          }}
-        />
+    <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:16 }}>
+      {[0,1,2].map(i => (
+        <div key={i} style={{
+          width:3, background:'var(--color-primary)',
+          borderRadius:2, transformOrigin:'bottom',
+          animation:`eq 0.8s ease-in-out infinite ${i*0.15}s`,
+          height:[8,14,10][i],
+        }} />
       ))}
     </div>
   );
 }
 
-/* ── "Add to playlist" context menu ─────────────────────── */
-function PlaylistMenu({ track, onClose }) {
+/* ── Context menu: add to playlist + YouTube ── */
+function ContextMenu({ track, isMusic, onClose }) {
   const [playlists, setPlaylists] = useState(null);
-  const [loading, setLoading]     = useState(false);
+  const [added, setAdded]         = useState(null);
 
   useState(() => {
-    playlistApi.getAll()
-      .then(setPlaylists)
-      .catch(() => setPlaylists([]));
-  }, []);
+    playlistApi.getAll().then(setPlaylists).catch(() => setPlaylists([]));
+  });
 
   async function addTo(pl) {
-    setLoading(true);
     try {
       await playlistApi.addTrack(pl.id, {
-        youtubeId: track.id,
-        title:     track.title,
-        artist:    track.artist,
-        duration:  track.duration,
-        thumbnail: track.thumbnail,
+        youtubeId: track.id, title: track.title,
+        artist: track.artist, duration: track.duration, thumbnail: track.thumbnail,
       });
+      setAdded(pl.id);
       toast.success(`Added to "${pl.name}"`);
-      onClose();
-    } catch (e) {
-      toast.error(e.message || 'Failed to add');
-    } finally {
-      setLoading(false);
-    }
+      setTimeout(onClose, 800);
+    } catch (e) { toast.error(e.message); }
   }
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.92, y: -6 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.92, y: -6 }}
-      transition={{ duration: 0.15 }}
-      className="absolute right-0 top-8 z-50 min-w-[180px] rounded-lg overflow-hidden shadow-2xl"
+      initial={{ opacity:0, scale:0.92, y:-6 }}
+      animate={{ opacity:1, scale:1, y:0 }}
+      exit={{ opacity:0, scale:0.92, y:-6 }}
+      transition={{ duration:0.13 }}
+      onClick={e => e.stopPropagation()}
       style={{
-        background:   'var(--color-surface-container-high)',
-        border:       '1px solid rgba(72,72,71,0.25)',
+        position:'absolute', right:0, top:36, zIndex:200,
+        minWidth:200, borderRadius:12, overflow:'hidden',
+        background:'var(--color-surface-container-high)',
+        border:'1px solid rgba(72,72,71,0.25)',
+        boxShadow:'0 16px 48px rgba(0,0,0,0.5)',
       }}
-      onClick={(e) => e.stopPropagation()}
     >
-      <div
-        className="px-3 py-2 text-xs font-bold uppercase tracking-widest"
-        style={{ color: 'var(--color-on-surface-variant)' }}
-      >
-        Add to playlist
-      </div>
+      {/* "Add to playlist" — only if this is a music/podcast track */}
+      {isMusic && (
+        <>
+          <p style={{ padding:'10px 14px 6px', fontSize:10, fontWeight:700,
+            textTransform:'uppercase', letterSpacing:'0.12em',
+            color:'var(--color-on-surface-variant)' }}>
+            Add to playlist
+          </p>
 
-      {playlists === null ? (
-        <div className="px-3 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
-          Loading...
-        </div>
-      ) : playlists.length === 0 ? (
-        <div className="px-3 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
-          No playlists yet.<br />Create one in Library.
-        </div>
-      ) : (
-        playlists.map((pl) => (
-          <button
-            key={pl.id}
-            onClick={() => !loading && addTo(pl)}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium text-left transition-all"
-            style={{ color: 'var(--color-on-surface)' }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-container-highest)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>queue_music</span>
-            <span className="truncate">{pl.name}</span>
-          </button>
-        ))
+          {playlists === null ? (
+            <p style={{ padding:'8px 14px', fontSize:12, color:'var(--color-on-surface-variant)' }}>Loading...</p>
+          ) : playlists.length === 0 ? (
+            <p style={{ padding:'8px 14px', fontSize:12, color:'var(--color-on-surface-variant)' }}>
+              No playlists yet.<br/>Create one in Library.
+            </p>
+          ) : (
+            playlists.map(pl => (
+              <button key={pl.id} onClick={() => addTo(pl)}
+                style={{
+                  width:'100%', display:'flex', alignItems:'center', gap:10,
+                  padding:'9px 14px', background:'transparent', border:'none',
+                  cursor:'pointer', textAlign:'left', transition:'background 0.1s',
+                  color: added === pl.id ? 'var(--color-secondary)' : 'var(--color-on-surface)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-container-highest)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                {added === pl.id
+                  ? <Check size={16} color="var(--color-secondary)" />
+                  : <ListMusic size={16} style={{ flexShrink:0 }} />
+                }
+                <span style={{ fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {pl.name}
+                </span>
+              </button>
+            ))
+          )}
+
+          {/* Separator */}
+          <div style={{ borderTop:'1px solid rgba(72,72,71,0.2)', margin:'4px 0' }} />
+        </>
       )}
 
-      {/* YouTube link */}
-      <div
-        className="mt-1 border-t"
-        style={{ borderColor: 'rgba(72,72,71,0.2)' }}
+      {/* YouTube link — always visible */}
+      <a
+        href={`https://www.youtube.com/watch?v=${track.id}`}
+        target="_blank" rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        style={{
+          display:'flex', alignItems:'center', gap:10,
+          padding:'9px 14px', fontSize:13, textDecoration:'none',
+          color:'var(--color-on-surface-variant)',
+          transition:'background 0.1s, color 0.1s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background='var(--color-surface-container-highest)'; e.currentTarget.style.color='var(--color-on-surface)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--color-on-surface-variant)'; }}
       >
-        <a
-          href={`https://www.youtube.com/watch?v=${track.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-medium transition-all"
-          style={{ color: 'var(--color-on-surface-variant)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--color-surface-container-highest)';
-            e.currentTarget.style.color = 'var(--color-on-surface)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--color-on-surface-variant)';
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* YouTube SVG logo */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-          </svg>
-          Open on YouTube
-        </a>
-      </div>
+        <Youtube size={16} style={{ flexShrink:0 }} />
+        Open on YouTube
+      </a>
     </motion.div>
   );
 }
 
-/* ── Main TrackRow component ─────────────────────────────── */
-export default function TrackRow({ track, index, queue, showIndex = true }) {
+/* ── TrackRow ──────────────────────────────── */
+// isMusic=true → shows "Add to playlist" in context menu
+// isMusic=false (default: auto-detect or passed explicitly) → only YouTube link
+export default function TrackRow({ track, index, queue, showIndex = true, isMusic = true }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { play, currentTrack, isPlaying, toggleLike, isLiked } = usePlayerStore();
 
-  const isActive = currentTrack?.id === track.id;
-  const liked    = isLiked(track.id);
+  const active = currentTrack?.id === track.id;
+  const liked  = isLiked(track.id);
 
-  const fmt = (s) => s
-    ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-    : '';
-
-  function handleMore(e) {
-    e.stopPropagation();
-    setMenuOpen((v) => !v);
-  }
-
-  function closeMenu() { setMenuOpen(false); }
-
-  // Close menu when clicking outside
-  const handleRowClick = () => {
-    if (menuOpen) { closeMenu(); return; }
-    play(track, queue);
-  };
+  const fmt = s => s ? `${Math.floor(s/60)}:${String(s%60|0).padStart(2,'0')}` : '';
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(index * 0.025, 0.4), duration: 0.3 }}
-      className="track-row group relative"
-      onClick={handleRowClick}
+      initial={{ opacity:0, y:5 }}
+      animate={{ opacity:1, y:0 }}
+      transition={{ delay: Math.min(index*0.025, 0.35), duration:0.28 }}
+      className="track-row group"
+      style={{ position:'relative' }}
+      onClick={() => { if (menuOpen) { setMenuOpen(false); return; } play(track, queue); }}
     >
-      {/* Index / Eq bars */}
-      <div className="w-8 text-center flex-shrink-0 relative" style={{ minHeight: '20px' }}>
-        {isActive && isPlaying ? (
-          <EqBars />
-        ) : (
+      {/* Index / eq */}
+      <div style={{ width:28, textAlign:'center', flexShrink:0, position:'relative', minHeight:20 }}>
+        {active && isPlaying ? <EqBars /> : (
           <>
             {showIndex && (
-              <span
-                className="text-sm group-hover:invisible"
-                style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-on-surface-variant)' }}
-              >
-                {index + 1}
+              <span style={{ fontSize:13, color: active ? 'var(--color-primary)' : 'var(--color-on-surface-variant)' }}
+                className="group-hover:invisible">
+                {index+1}
               </span>
             )}
-            <span
-              className="material-symbols-outlined ms-fill absolute inset-0 flex items-center justify-center
-                         opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ fontSize: 18, color: 'var(--color-on-surface)' }}
-            >
-              play_arrow
-            </span>
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center',
+              opacity:0 }} className="group-hover:opacity-100">
+              <Play size={16} fill="var(--color-on-surface)" color="var(--color-on-surface)" />
+            </div>
           </>
         )}
       </div>
 
       {/* Thumbnail */}
-      <div
-        className="w-10 h-10 rounded flex-shrink-0 overflow-hidden flex items-center justify-center"
-        style={{ background: 'var(--color-surface-container-high)' }}
-      >
-        {track.thumbnail ? (
-          <img src={track.thumbnail} alt={track.title} className="w-full h-full object-cover" />
-        ) : (
-          <span className="material-symbols-outlined" style={{ color: 'var(--color-on-surface-variant)', fontSize: 18 }}>
-            music_note
-          </span>
-        )}
+      <div style={{ width:40, height:40, borderRadius:6, flexShrink:0,
+        background:'var(--color-surface-container-high)', overflow:'hidden',
+        display:'flex', alignItems:'center', justifyContent:'center' }}>
+        {track.thumbnail
+          ? <img src={track.thumbnail} alt={track.title} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+          : <ListMusic size={16} color="var(--color-on-surface-variant)" />
+        }
       </div>
 
-      {/* Title + Artist */}
-      <div className="flex-1 min-w-0">
-        <p
-          className="text-sm font-semibold truncate"
-          style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-on-surface)' }}
-        >
-          {track.title}
-        </p>
-        <p className="text-xs truncate" style={{ color: 'var(--color-on-surface-variant)' }}>
-          {track.artist}
-        </p>
+      {/* Title + artist */}
+      <div style={{ flex:1, minWidth:0 }}>
+        <p style={{ fontSize:13, fontWeight:600, color: active ? 'var(--color-primary)' : 'var(--color-on-surface)',
+          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{track.title}</p>
+        <p style={{ fontSize:11, color:'var(--color-on-surface-variant)',
+          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginTop:1 }}>{track.artist}</p>
       </div>
 
       {/* Duration */}
       {track.duration && (
-        <span
-          className="text-xs flex-shrink-0 tabular-nums"
-          style={{ color: 'var(--color-on-surface-variant)' }}
-        >
+        <span style={{ fontSize:11, color:'var(--color-on-surface-variant)', flexShrink:0, tabularNums:true }}>
           {fmt(track.duration)}
         </span>
       )}
 
-      {/* Like button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          if (currentTrack?.id !== track.id) {
-            usePlayerStore.setState({ currentTrack: track });
-          }
-          toggleLike();
-        }}
-        className="icon-btn flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Like"
-      >
-        <span
-          className="material-symbols-outlined"
-          style={{
-            fontSize: 18,
-            fontVariationSettings: liked ? "'FILL' 1" : "'FILL' 0",
-            color: liked ? 'var(--color-tertiary)' : undefined,
-          }}
-        >
-          favorite
-        </span>
+      {/* Like */}
+      <button onClick={e => { e.stopPropagation(); if (currentTrack?.id !== track.id) usePlayerStore.setState({ currentTrack:track }); toggleLike(); }}
+        className="icon-btn" style={{ flexShrink:0, opacity:0, transition:'opacity 0.15s' }}
+        data-hover-show title="Like">
+        <Heart size={16} fill={liked ? 'var(--color-tertiary)' : 'none'}
+          color={liked ? 'var(--color-tertiary)' : 'var(--color-on-surface-variant)'} strokeWidth={2} />
       </button>
 
-      {/* More / Add to playlist */}
-      <div className="relative flex-shrink-0">
-        <button
-          onClick={handleMore}
-          className="icon-btn opacity-0 group-hover:opacity-100 transition-opacity"
-          title="More options"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>more_horiz</span>
+      {/* More (context menu) */}
+      <div style={{ position:'relative', flexShrink:0 }}>
+        <button onClick={e => { e.stopPropagation(); setMenuOpen(v=>!v); }}
+          className="icon-btn" style={{ opacity:0, transition:'opacity 0.15s' }}
+          data-hover-show title="More">
+          <MoreHorizontal size={16} />
         </button>
 
         <AnimatePresence>
           {menuOpen && (
             <>
-              {/* Backdrop to close */}
-              <div
-                className="fixed inset-0 z-40"
-                onClick={(e) => { e.stopPropagation(); closeMenu(); }}
-              />
-              <PlaylistMenu track={track} onClose={closeMenu} />
+              <div style={{ position:'fixed', inset:0, zIndex:199 }}
+                onClick={e => { e.stopPropagation(); setMenuOpen(false); }} />
+              <ContextMenu track={track} isMusic={isMusic} onClose={() => setMenuOpen(false)} />
             </>
           )}
         </AnimatePresence>
       </div>
+
+      {/* CSS to show hover-only elements */}
+      <style>{`
+        .group:hover [data-hover-show] { opacity: 1 !important; }
+        .group:hover .group-hover\\:invisible { visibility: hidden; }
+        .group:hover .group-hover\\:opacity-100 { opacity: 1 !important; }
+      `}</style>
     </motion.div>
   );
 }

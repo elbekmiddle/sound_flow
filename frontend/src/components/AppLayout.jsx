@@ -1,27 +1,41 @@
 import { Outlet } from 'react-router-dom';
-import Sidebar from './Sidebar.jsx';
+import { useState, createContext, useContext } from 'react';
+import Sidebar   from './Sidebar.jsx';
 import PlayerBar from './PlayerBar.jsx';
 import MobileNav from './MobileNav.jsx';
 
+export const SidebarCtx = createContext({ open: true, toggle: () => {} });
+export const useSidebar = () => useContext(SidebarCtx);
+
 export default function AppLayout() {
+  const [open, setOpen] = useState(true);
+  const toggle = () => setOpen(v => !v);
+
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* ── Sidebar (desktop) ─────────────────────── */}
-      <Sidebar />
+    <SidebarCtx.Provider value={{ open, toggle }}>
+      <div style={{ display:'flex', height:'100vh', background:'var(--color-background)', overflow:'hidden' }}>
+        {/* Sidebar — hidden on mobile via CSS, collapsible on desktop */}
+        <Sidebar />
 
-      {/* ── Main column ───────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto pb-[80px] md:pb-[88px]">
-          <Outlet />
-        </main>
+        {/* Main column */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden' }}>
+          <main style={{ flex:1, overflowY:'auto', paddingBottom: 90 }}>
+            <Outlet />
+          </main>
+          <PlayerBar />
+        </div>
 
-        {/* Player bar */}
-        <PlayerBar />
+        {/* Mobile bottom nav */}
+        <MobileNav />
       </div>
 
-      {/* ── Mobile bottom nav ─────────────────────── */}
-      <MobileNav />
-    </div>
+      <style>{`
+        @media (max-width: 767px) {
+          .desktop-sidebar { display: none !important; }
+          .mobile-nav { display: flex !important; }
+          main { padding-bottom: 140px !important; }
+        }
+      `}</style>
+    </SidebarCtx.Provider>
   );
 }

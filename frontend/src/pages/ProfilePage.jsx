@@ -1,148 +1,132 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { LogOut, Save, Volume2, Shuffle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore.js';
 import usePlayerStore from '../store/playerStore.js';
 
+function Toggle({ on, onChange }) {
+  return (
+    <button onClick={()=>onChange(!on)}
+      style={{ width:42, height:24, borderRadius:99, border:'none', cursor:'pointer',
+        background: on ? 'var(--color-primary)' : 'var(--color-surface-container-highest)',
+        position:'relative', transition:'background 0.2s', flexShrink:0 }}>
+      <div style={{ position:'absolute', top:3, width:18, height:18, background:'#fff',
+        borderRadius:'50%', boxShadow:'0 1px 4px rgba(0,0,0,0.3)',
+        transition:'left 0.2s', left: on ? 'calc(100% - 21px)' : 3 }} />
+    </button>
+  );
+}
+
 export default function ProfilePage() {
-  const { profile, logout, updateProfile } = useAuthStore();
+  const { profile, updateProfile, logout } = useAuthStore();
   const { clearQueue } = usePlayerStore();
   const navigate = useNavigate();
 
-  const [displayName, setDisplayName] = useState(profile?.display_name || '');
-  const [saving, setSaving] = useState(false);
-  const [audioQuality, setAudioQuality] = useState('high');
-  const [crossfade, setCrossfade]       = useState(false);
-  const [normalizeVol, setNormalizeVol] = useState(true);
+  const [displayName, setName]  = useState(profile?.display_name||'');
+  const [saving, setSaving]     = useState(false);
+  const [quality, setQuality]   = useState('high');
+  const [crossfade, setCross]   = useState(false);
+  const [normalize, setNorm]    = useState(true);
 
   const name    = profile?.display_name || 'User';
-  const initial = name[0]?.toUpperCase();
-  const email   = profile?.email || '';
+  const initial = name[0]?.toUpperCase() ?? '?';
 
   async function handleSave() {
     if (!displayName.trim()) return;
     setSaving(true);
-    try {
-      await updateProfile({ displayName });
-      toast.success('Profile updated');
-    } catch {
-      toast.error('Failed to update profile');
-    } finally {
-      setSaving(false);
-    }
+    try { await updateProfile({ displayName }); toast.success('Profile updated'); }
+    catch { toast.error('Failed to update'); }
+    finally { setSaving(false); }
   }
 
   async function handleSignOut() {
-    clearQueue();
-    await logout();
-    navigate('/login');
-    toast('Signed out');
+    clearQueue(); logout(); navigate('/login'); toast('Signed out');
   }
 
+  const C = { text:'var(--color-on-surface)', muted:'var(--color-on-surface-variant)',
+    surf:'var(--color-surface-container)', surfH:'var(--color-surface-container-high)',
+    prim:'var(--color-primary)' };
+
   const stats = [
-    { label: 'Tracks played', value: profile?.plays_count  || 0 },
-    { label: 'Playlists',     value: profile?.playlist_count || 0 },
-    { label: 'Liked songs',   value: profile?.liked_count   || 0 },
+    { label:'Played', val: profile?.plays_count||0 },
+    { label:'Playlists', val: profile?.playlist_count||0 },
+    { label:'Liked', val: profile?.liked_count||0 },
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-2xl mx-auto">
-
-      {/* ── Profile Header ──────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-6 mb-10"
-      >
-        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full
-                        bg-gradient-to-br from-primary/50 to-purple-900
-                        flex items-center justify-center text-3xl font-black text-primary
-                        shadow-xl flex-shrink-0">
+    <div style={{ padding:'24px 16px 0', maxWidth:640, margin:'0 auto' }}>
+      {/* Profile header */}
+      <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }}
+        style={{ display:'flex', alignItems:'center', gap:20, marginBottom:32, flexWrap:'wrap' }}>
+        <div style={{ width:80, height:80, borderRadius:'50%', flexShrink:0,
+          background:'linear-gradient(135deg,rgba(199,153,255,.5),#1e0342)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          fontSize:28, fontWeight:900, color:C.prim,
+          boxShadow:'0 8px 32px rgba(199,153,255,0.2)' }}>
           {initial}
         </div>
         <div>
-          <h1 className="font-headline font-black text-3xl tracking-tight">{name}</h1>
-          <p className="text-on-surface-variant text-sm mt-0.5">{email}</p>
-          {/* Stats row */}
-          <div className="flex items-center gap-5 mt-3">
-            {stats.map(s => (
-              <div key={s.label} className="text-center">
-                <p className="font-bold text-on-surface">{s.value}</p>
-                <p className="text-[10px] text-on-surface-variant">{s.label}</p>
+          <h1 style={{ fontFamily:'var(--font-headline)', fontWeight:900, fontSize:26, letterSpacing:'-0.03em' }}>{name}</h1>
+          <p style={{ color:C.muted, fontSize:13, marginTop:2 }}>{profile?.email}</p>
+          <div style={{ display:'flex', gap:20, marginTop:10 }}>
+            {stats.map(s=>(
+              <div key={s.label} style={{ textAlign:'center' }}>
+                <p style={{ fontWeight:700, fontSize:16 }}>{s.val}</p>
+                <p style={{ fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.1em' }}>{s.label}</p>
               </div>
             ))}
           </div>
         </div>
       </motion.div>
 
-      {/* ── Account Settings ────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.08 }}
-        className="bg-surface-container rounded-lg p-6 mb-4"
-      >
-        <h3 className="font-headline font-bold text-lg mb-5">Account Settings</h3>
-        <div className="space-y-4">
+      {/* Account settings */}
+      <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.07 }}
+        style={{ background:C.surf, borderRadius:14, padding:22, marginBottom:14 }}>
+        <h3 style={{ fontFamily:'var(--font-headline)', fontWeight:800, fontSize:17, marginBottom:18 }}>Account Settings</h3>
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              Display Name
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSave()}
-              className="w-full mt-1.5 bg-surface-container-highest rounded py-2.5 px-3
-                         text-sm text-on-surface border-none outline-none transition-all"
-            />
+            <label style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.12em',
+              color:C.muted, display:'block', marginBottom:6 }}>Display Name</label>
+            <input type="text" value={displayName} onChange={e=>setName(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&handleSave()}
+              className="input-field" />
           </div>
           <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              disabled
-              className="w-full mt-1.5 bg-surface-container-highest/50 rounded py-2.5 px-3
-                         text-sm text-on-surface-variant border-none outline-none cursor-not-allowed"
-            />
+            <label style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.12em',
+              color:C.muted, display:'block', marginBottom:6 }}>Email</label>
+            <input type="email" value={profile?.email||''} disabled
+              className="input-field" style={{ opacity:0.5, cursor:'not-allowed' }} />
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving || displayName === profile?.display_name}
-            className="w-full bg-primary text-on-primary-container font-bold py-2.5 rounded
-                       text-sm hover:bg-primary-container transition-all active:scale-95
-                       disabled:opacity-50"
-          >
+          <button onClick={handleSave} disabled={saving||displayName===profile?.display_name}
+            className="btn-primary"
+            style={{ padding:'11px', fontSize:14, width:'100%', display:'flex',
+              alignItems:'center', justifyContent:'center', gap:8 }}>
+            <Save size={16}/>
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </motion.div>
 
-      {/* ── Playback Preferences ────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.12 }}
-        className="bg-surface-container rounded-lg p-6 mb-4"
-      >
-        <h3 className="font-headline font-bold text-lg mb-5">Playback</h3>
-        <div className="space-y-1">
+      {/* Playback preferences */}
+      <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.1 }}
+        style={{ background:C.surf, borderRadius:14, padding:22, marginBottom:14 }}>
+        <h3 style={{ fontFamily:'var(--font-headline)', fontWeight:800, fontSize:17, marginBottom:16 }}>Playback</h3>
+        <div style={{ display:'flex', flexDirection:'column' }}>
           {/* Audio Quality */}
-          <div className="flex items-center justify-between py-3 border-b border-outline-variant/10">
-            <div>
-              <p className="font-medium text-sm">Audio Quality</p>
-              <p className="text-xs text-on-surface-variant">Stream quality setting</p>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+            padding:'12px 0', borderBottom:'1px solid rgba(72,72,71,0.12)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <Volume2 size={18} color={C.muted} />
+              <div>
+                <p style={{ fontWeight:500, fontSize:14 }}>Audio Quality</p>
+                <p style={{ fontSize:11, color:C.muted, marginTop:2 }}>Stream quality</p>
+              </div>
             </div>
-            <select
-              value={audioQuality}
-              onChange={e => setAudioQuality(e.target.value)}
-              className="bg-surface-container-highest text-sm rounded py-1.5 px-3
-                         border-none outline-none text-on-surface"
-            >
+            <select value={quality} onChange={e=>setQuality(e.target.value)}
+              style={{ background:'var(--color-surface-container-highest)', border:'none',
+                borderRadius:8, padding:'6px 10px', fontSize:13, color:C.text, outline:'none', cursor:'pointer' }}>
               <option value="high">High</option>
               <option value="medium">Medium</option>
               <option value="low">Low</option>
@@ -150,60 +134,38 @@ export default function ProfilePage() {
           </div>
 
           {/* Crossfade */}
-          <div className="flex items-center justify-between py-3 border-b border-outline-variant/10">
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+            padding:'12px 0', borderBottom:'1px solid rgba(72,72,71,0.12)' }}>
             <div>
-              <p className="font-medium text-sm">Crossfade</p>
-              <p className="text-xs text-on-surface-variant">Smooth transitions between tracks</p>
+              <p style={{ fontWeight:500, fontSize:14 }}>Crossfade</p>
+              <p style={{ fontSize:11, color:C.muted, marginTop:2 }}>Smooth transitions between tracks</p>
             </div>
-            <button
-              onClick={() => setCrossfade(!crossfade)}
-              className={`w-11 h-6 rounded-full relative transition-all duration-200
-                ${crossfade ? 'bg-primary' : 'bg-surface-container-highest'}`}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full
-                               shadow transition-all duration-200
-                               ${crossfade ? 'left-6' : 'left-1'}`} />
-            </button>
+            <Toggle on={crossfade} onChange={setCross} />
           </div>
 
-          {/* Normalize Volume */}
-          <div className="flex items-center justify-between py-3">
+          {/* Normalize */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 0' }}>
             <div>
-              <p className="font-medium text-sm">Normalize Volume</p>
-              <p className="text-xs text-on-surface-variant">Consistent loudness across tracks</p>
+              <p style={{ fontWeight:500, fontSize:14 }}>Normalize Volume</p>
+              <p style={{ fontSize:11, color:C.muted, marginTop:2 }}>Consistent loudness across tracks</p>
             </div>
-            <button
-              onClick={() => setNormalizeVol(!normalizeVol)}
-              className={`w-11 h-6 rounded-full relative transition-all duration-200
-                ${normalizeVol ? 'bg-primary' : 'bg-surface-container-highest'}`}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full
-                               shadow transition-all duration-200
-                               ${normalizeVol ? 'left-6' : 'left-1'}`} />
-            </button>
+            <Toggle on={normalize} onChange={setNorm} />
           </div>
         </div>
       </motion.div>
 
-      {/* ── Danger Zone ─────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.16 }}
-        className="flex items-center justify-between py-2"
-      >
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2 text-error hover:text-error/80
-                     transition-colors text-sm font-semibold"
-        >
-          <span className="material-symbols-outlined text-[20px]">logout</span>
-          Sign Out
+      {/* Sign out */}
+      <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.13 }}
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 4px', marginBottom:32 }}>
+        <button onClick={handleSignOut}
+          style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none',
+            cursor:'pointer', color:'var(--color-error)', fontSize:13, fontWeight:600,
+            transition:'opacity 0.15s' }}
+          onMouseEnter={e=>e.currentTarget.style.opacity='0.75'}
+          onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+          <LogOut size={17}/> Sign Out
         </button>
-
-        <p className="text-xs text-on-surface-variant/40">
-          Obsidian Audio v1.0
-        </p>
+        <p style={{ fontSize:11, color:'rgba(173,170,170,0.35)' }}>Obsidian Audio v3.0</p>
       </motion.div>
     </div>
   );

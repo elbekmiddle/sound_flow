@@ -1,90 +1,64 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import {
-  auth,
-  googleProvider,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  signInWithPopup,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  updateProfile,
-} from '../api/firebase.js';
-import { authApi } from '../api/client.js';
+import { authApi, setToken, clearToken, getToken } from '../api/client.js';
 
 const useAuthStore = create(
   persist(
     (set, get) => ({
-      user:        null,
-      profile:     null,
-      loading:     true,
-      initialized: false,
+      user:    null,
+      token:   null,
+      loading: true,
 
-      // Called by onAuthStateChanged listener in App.jsx
-      setUser: async (firebaseUser) => {
-        if (!firebaseUser) {
-          set({ user: null, profile: null, loading: false, initialized: true });
-          return;
-        }
-
-        set({ user: firebaseUser, loading: true });
-
+      // Called on app mount — validate stored token
+      init: async () => {
+        const t = getToken();
+        if (!t) { set({ loading: false }); return; }
         try {
-          // Sync to our backend + get full profile
-          const idToken = await firebaseUser.getIdToken();
-          const { user, token } = await authApi.syncUser(
-            idToken,
-            firebaseUser.displayName
-          );
-          localStorage.setItem('obsidian_token', token);
-          set({ profile: user, loading: false, initialized: true });
+          const user = await authApi.me();
+          set({ user, token: t, loading: false });
         } catch {
-          set({ loading: false, initialized: true });
+          clearToken();
+          set({ user: null, token: null, loading: false });
         }
       },
 
-      login: async (email, password) => {
-        const cred = await signInWithEmailAndPassword(auth, email, password);
-        return cred.user;
+      register: async ({ displayName, email, password }) => {
+        const { user, token } = await authApi.register({ displayName, email, password });
+        setToken(token);
+        set({ user, token });
+        return user;
       },
 
-      register: async (email, password, displayName) => {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(cred.user, { displayName });
-        await sendEmailVerification(cred.user);
-        return cred.user;
+      login: async ({ email, password }) => {
+        const { user, token } = await authApi.login({ email, password });
+        setToken(token);
+        set({ user, token });
+        return user;
       },
 
-      loginWithGoogle: async () => {
-        const result = await signInWithPopup(auth, googleProvider);
-        return result.user;
+      logout: () => {
+        clearToken();
+        set({ user: null, token: null });
       },
 
-      logout: async () => {
-        await signOut(auth);
-        localStorage.removeItem('obsidian_token');
-        set({ user: null, profile: null });
-      },
-
-      resetPassword: (email) => sendPasswordResetEmail(auth, email),
+      forgotPassword: (email) => authApi.forgotPassword(email),
 
       updateProfile: async (data) => {
-        const updated = await authApi.updateProfile(data);
-        set({ profile: updated });
+        const updated = await authApi.update(data);
+        set({ user: updated });
         return updated;
       },
 
-      refreshProfile: async () => {
+      refreshUser: async () => {
         try {
-          const profile = await authApi.getMe();
-          set({ profile });
+          const user = await authApi.me();
+          set({ user });
         } catch {}
       },
     }),
     {
       name: 'obsidian-auth',
-      partialize: (state) => ({ profile: state.profile }),
+      partialize: (s) => ({ user: s.user, token: s.token }),
     }
   )
 );

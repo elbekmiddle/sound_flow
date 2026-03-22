@@ -1,117 +1,89 @@
 import axios from 'axios';
-import { auth } from './firebase.js';
 
-// ── Smart API base URL ─────────────────────────────────────
-// • Dev:        reads VITE_API_URL (e.g. http://localhost:5000)
-// • Production: MUST set VITE_API_URL to your HTTPS backend URL
-//               e.g. https://api.obsidian-audio.com
-//   Never use http:// on an https:// page (Mixed Content error!)
-const API_BASE = import.meta.env.VITE_API_URL
-  // If the env var starts with http:// but the page is https://, upgrade it
-  ? import.meta.env.VITE_API_URL.replace(
-      /^http:\/\//,
-      window?.location?.protocol === 'https:' ? 'https://' : 'http://'
-    )
-  : window?.location?.origin ?? 'http://localhost:5000';
+const API_BASE = (() => {
+  const raw = import.meta.env.VITE_API_URL || '';
+  if (!raw) return window?.location?.origin || 'http://localhost:5000';
+  // Auto-upgrade http→https when page is served over HTTPS
+  if (window?.location?.protocol === 'https:') return raw.replace(/^http:\/\//, 'https://');
+  return raw;
+})();
 
-const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
-});
+const TOKEN_KEY = 'obsidian_token';
 
-// ── Auto-attach Firebase token ─────────────────────────────
-api.interceptors.request.use(async (config) => {
-  try {
-    const user = auth.currentUser;
-    if (user) {
-      const token = await user.getIdToken();
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  } catch { /* no-op — unauthenticated request */ }
+export const getToken  = () => localStorage.getItem(TOKEN_KEY);
+export const setToken  = (t) => localStorage.setItem(TOKEN_KEY, t);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+const api = axios.create({ baseURL: API_BASE, timeout: 15000, headers: { 'Content-Type': 'application/json' } });
+
+api.interceptors.request.use((config) => {
+  const t = getToken();
+  if (t) config.headers.Authorization = `Bearer ${t}`;
   return config;
 });
 
-// ── Global error handling ──────────────────────────────────
 api.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    const message =
-      error.response?.data?.error ||
-      error.response?.data?.message ||
-      error.message ||
-      'Request failed';
-
-    if (error.response?.status === 401) {
-      auth.signOut().catch(() => {});
-    }
-    return Promise.reject(new Error(message));
+  (r) => r.data,
+  (err) => {
+    if (err.response?.status === 401) { clearToken(); window.location.href = '/login'; }
+    return Promise.reject(new Error(err.response?.data?.error || err.message || 'Request failed'));
   }
 );
 
 export { API_BASE };
 
-// ── Music API ──────────────────────────────────────────────
+/* ── Auth ─────────────────────────────────────── */
+export const authApi = {
+  register:       (d) => api.post('/api/auth/register', d),
+  login:          (d) => api.post('/api/auth/login', d),
+  me:             ()  => api.get('/api/auth/me'),
+  update:         (d) => api.put('/api/auth/profile', d),
+  forgotPassword: (e) => api.post('/api/auth/forgot-password', { email: e }),
+  resetPassword:  (d) => api.post('/api/auth/reset-password', d),
+  verifyEmail:    (t) => api.post('/api/auth/verify-email', { token: t }),
+};
+
+/* ── Music ────────────────────────────────────── */
 export const musicApi = {
-  search:      (q, limit = 20, offset = 0) =>
-    api.get('/api/music/search', { params: { q, limit, offset } }),
-  suggestions: (q) =>
-    api.get('/api/music/suggestions', { params: { q } }),
-  info:        (id) =>
-    api.get('/api/music/info', { params: { id } }),
-  trending:    () =>
-    api.get('/api/music/trending'),
-  // Stream URL — must also be HTTPS in production
+  search:      (q, limit = 20, offset = 0) => api.get('/api/music/search', { params: { q, limit, offset } }),
+  suggestions: (q)  => api.get('/api/music/suggestions', { params: { q } }),
+  info:        (id) => api.get('/api/music/info', { params: { id } }),
+  trending:    ()   => api.get('/api/music/trending'),
   streamUrl:   (id) => `${API_BASE}/api/music/stream?id=${id}`,
 };
 
-// ── Auth API ───────────────────────────────────────────────
-export const authApi = {
-  syncUser:      (idToken, displayName) =>
-    api.post('/api/auth/sync', { idToken, displayName }),
-  getMe:         () => api.get('/api/auth/me'),
-  updateProfile: (data) => api.put('/api/auth/profile', data),
-};
-
-// ── Playlist API ───────────────────────────────────────────
+/* ── Playlist ─────────────────────────────────── */
 export const playlistApi = {
-  getAll:      () => api.get('/api/playlist'),
-  getOne:      (id) => api.get(`/api/playlist/${id}`),
-  create:      (data) => api.post('/api/playlist', data),
-  update:      (id, data) => api.put(`/api/playlist/${id}`, data),
-  delete:      (id) => api.delete(`/api/playlist/${id}`),
-  addTrack:    (playlistId, track) =>
-    api.post(`/api/playlist/${playlistId}/tracks`, track),
-  removeTrack: (playlistId, youtubeId) =>
-    api.delete(`/api/playlist/${playlistId}/tracks/${youtubeId}`),
+  getAll:      ()             => api.get('/api/playlist'),
+  getOne:      (id)           => api.get(`/api/playlist/${id}`),
+  create:      (d)            => api.post('/api/playlist', d),
+  update:      (id, d)        => api.put(`/api/playlist/${id}`, d),
+  delete:      (id)           => api.delete(`/api/playlist/${id}`),
+  addTrack:    (pid, track)   => api.post(`/api/playlist/${pid}/tracks`, track),
+  removeTrack: (pid, ytId)    => api.delete(`/api/playlist/${pid}/tracks/${ytId}`),
 };
 
-// ── History API ────────────────────────────────────────────
+/* ── History ──────────────────────────────────── */
 export const historyApi = {
   get:         () => api.get('/api/history'),
-  add:         (data) => api.post('/api/history', data),
+  add:         (d) => api.post('/api/history', d),
   getSearches: () => api.get('/api/history/search'),
   clear:       () => api.delete('/api/history'),
 };
 
-// ── Library API ────────────────────────────────────────────
+/* ── Library ──────────────────────────────────── */
 export const libraryApi = {
-  getLiked:       () => api.get('/api/library/liked'),
-  likeTrack:      (youtubeId, data) =>
-    api.post(`/api/library/liked/${youtubeId}`, data),
-  unlikeTrack:    (youtubeId) =>
-    api.delete(`/api/library/liked/${youtubeId}`),
-  getLikedStatus: (youtubeId) =>
-    api.get(`/api/library/liked/${youtubeId}/status`),
+  getLiked:    ()           => api.get('/api/library/liked'),
+  likeTrack:   (id, d)      => api.post(`/api/library/liked/${id}`, d),
+  unlikeTrack: (id)         => api.delete(`/api/library/liked/${id}`),
 };
 
-// ── Podcast API ────────────────────────────────────────────
+/* ── Podcast ──────────────────────────────────── */
 export const podcastApi = {
-  getAll:       () => api.get('/api/podcast'),
-  getEpisodes:  (id) => api.get(`/api/podcast/${id}/episodes`),
-  getProgress:  (episodeId) => api.get(`/api/podcast/progress/${episodeId}`),
-  saveProgress: (episodeId, data) =>
-    api.put(`/api/podcast/progress/${episodeId}`, data),
+  getAll:       ()    => api.get('/api/podcast'),
+  getEpisodes:  (id)  => api.get(`/api/podcast/${id}/episodes`),
+  getProgress:  (eid) => api.get(`/api/podcast/progress/${eid}`),
+  saveProgress: (eid, d) => api.put(`/api/podcast/progress/${eid}`, d),
 };
 
 export default api;

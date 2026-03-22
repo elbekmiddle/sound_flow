@@ -13,9 +13,9 @@
     "react-router-dom": "^6.26.2",
     "zustand": "^4.5.5",
     "framer-motion": "^11.11.1",
-    "firebase": "^10.14.0",
     "axios": "^1.7.7",
     "react-hot-toast": "^2.4.1",
+    "lucide-react": "^0.460.0",
     "clsx": "^2.1.1"
   },
   "devDependencies": {

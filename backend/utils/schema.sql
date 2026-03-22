@@ -169,3 +169,13 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER playlist_track_count_trigger
 AFTER INSERT OR DELETE ON playlist_tracks
 FOR EACH ROW EXECUTE FUNCTION update_playlist_track_count();
+
+-- ── Additional columns for pure-JWT auth (no Firebase) ─────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash       TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified      BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_token  TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token         TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;
+
+-- firebase_uid is now optional
+-- existing firebase_uid UNIQUE constraint stays for backward compat

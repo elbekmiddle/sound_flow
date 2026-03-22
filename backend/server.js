@@ -1,10 +1,10 @@
 import 'dotenv/config';
-import express from 'express';
-import cors    from 'cors';
-import helmet  from 'helmet';
+import express     from 'express';
+import cors        from 'cors';
+import helmet      from 'helmet';
 import compression from 'compression';
-import morgan  from 'morgan';
-import rateLimit from 'express-rate-limit';
+import morgan      from 'morgan';
+import rateLimit   from 'express-rate-limit';
 
 import authRoutes     from './routes/auth.js';
 import musicRoutes    from './routes/music.js';
@@ -13,67 +13,34 @@ import historyRoutes  from './routes/history.js';
 import libraryRoutes  from './routes/library.js';
 import podcastRoutes  from './routes/podcast.js';
 
-import { errorHandler } from './middleware/errorHandler.js';
-import { connectDB }    from './config/database.js';
-import { connectRedis } from './config/redis.js';
+import { errorHandler }  from './middleware/errorHandler.js';
+import { connectDB }     from './config/database.js';
+import { connectRedis }  from './config/redis.js';
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
-// ── CRITICAL: Trust reverse proxy (Render, Railway, Heroku, Vercel, etc.) ──
-// Fixes: ERR_ERL_UNEXPECTED_X_FORWARDED_FOR from express-rate-limit
-// Must be set BEFORE any middleware that reads IP addresses
 app.set('trust proxy', 1);
 
-// ── Security ────────────────────────────────────────────────────────────────
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: false,
-}));
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, contentSecurityPolicy: false }));
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-
-// ── CORS — OPEN TO ALL ORIGINS ──────────────────────────────────────────────
-// Allows: Vercel preview URLs, custom domains, localhost, Chrome extension
-// Setting origin:true reflects whatever Origin header is sent → always allowed
-app.use(cors({
-  origin: true,
-  credentials: true,
-  methods:         ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders:  ['Content-Type','Authorization','X-Requested-With','Accept'],
-  exposedHeaders:  ['Content-Range','Accept-Ranges','X-Track-Title'],
-  maxAge: 86400,   // cache pre-flight 24h
-}));
-
-// Handle pre-flight OPTIONS for ALL routes
+app.use(cors({ origin: true, credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept'],
+  exposedHeaders: ['Content-Range','Accept-Ranges','X-Track-Title'],
+  maxAge: 86400 }));
 app.options('*', cors({ origin: true, credentials: true }));
-
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ── Rate Limiting (safe now that trust proxy is set) ─────────────────────────
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 min
-  max: 500,
-  standardHeaders: true,
-  legacyHeaders:   false,
-  message: { error: 'Too many requests, please try again later.' },
-  // Skip rate limit errors crashing the app
-  skip: () => false,
-  handler: (req, res) => res.status(429).json({ error: 'Too many requests, please try again later.' }),
-});
-
-const streamLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 60,
-  message: { error: 'Stream rate limit exceeded.' },
-  handler: (req, res) => res.status(429).json({ error: 'Stream rate limit exceeded.' }),
-});
-
-app.use('/api/', apiLimiter);
+const limiter = rateLimit({ windowMs: 15*60*1000, max: 500, standardHeaders: true, legacyHeaders: false,
+  handler: (_,res) => res.status(429).json({ error: 'Too many requests' }) });
+const streamLimiter = rateLimit({ windowMs: 60*1000, max: 60,
+  handler: (_,res) => res.status(429).json({ error: 'Stream rate limit exceeded' }) });
+app.use('/api/', limiter);
 app.use('/api/music/stream', streamLimiter);
 
-// ── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',     authRoutes);
 app.use('/api/music',    musicRoutes);
 app.use('/api/playlist', playlistRoutes);
@@ -81,39 +48,32 @@ app.use('/api/history',  historyRoutes);
 app.use('/api/library',  libraryRoutes);
 app.use('/api/podcast',  podcastRoutes);
 
-// ── Health check ─────────────────────────────────────────────────────────────
-app.get('/health', (_, res) => {
-  res.json({
-    status:    'ok',
-    timestamp: new Date().toISOString(),
-    uptime:    Math.round(process.uptime()),
-    version:   '3.0.0',
-  });
-});
-
-// ── Root ────────────────────────────────────────────────────────────────────
-app.get('/', (_, res) => {
-  res.json({ name: 'Obsidian Audio API', version: '3.0.0', status: 'running' });
-});
-
-// ── 404 ──────────────────────────────────────────────────────────────────────
-app.use((req, res) => {
-  res.status(404).json({ error: `${req.method} ${req.path} not found` });
-});
-
-// ── Global error handler ─────────────────────────────────────────────────────
+app.get('/health', (_,res) => res.json({ status: 'ok', uptime: Math.round(process.uptime()), version: '4.0.0' }));
+app.get('/',       (_,res) => res.json({ name: 'Sound Flow API', version: '4.0.0' }));
+app.use((req, res) => res.status(404).json({ error: `${req.method} ${req.path} not found` }));
 app.use(errorHandler);
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
+// ── Auto-migrations on every startup ─────────────────────────────────────────
+const AUTO_MIGRATE = `
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash          TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified         BOOLEAN DEFAULT FALSE;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_token     TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_expires   TIMESTAMPTZ;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token            TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires    TIMESTAMPTZ;
+  CREATE INDEX IF NOT EXISTS idx_users_reset_token  ON users(reset_token)  WHERE reset_token  IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_users_verify_token ON users(email_verify_token) WHERE email_verify_token IS NOT NULL;
+`;
+
 async function bootstrap() {
   try {
-    await connectDB();
+    const pool = await connectDB();
     await connectRedis();
+    try { await pool.query(AUTO_MIGRATE); console.log('✅ Auto-migrations applied'); }
+    catch (e) { console.warn('⚠️  Migration warning:', e.message.split('\n')[0]); }
     app.listen(PORT, () => {
-      console.log(`🚀 Obsidian Audio API → port ${PORT}`);
-      console.log(`🌍 CORS: open to all origins`);
-      console.log(`🔒 Trust proxy: enabled`);
-      console.log(`🔧 Node.js: ${process.version}`);
+      console.log(`🚀 Sound Flow API → port ${PORT}`);
+      console.log(`🌍 CORS: open  |  🔒 Proxy: trusted  |  🎵 ytdl: @distube`);
     });
   } catch (err) {
     console.error('❌ Startup failed:', err.message);

@@ -12,7 +12,7 @@ function makeToken(userId, email) {
   return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
 
-// ─── Register ──────────────────────────────────────────────────────────────
+// ── Register ──────────────────────────────────────────────────────────────────
 export async function register(req, res) {
   const { displayName, email, password } = req.body;
 
@@ -23,35 +23,42 @@ export async function register(req, res) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
-  const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+  const existing = await query(
+    'SELECT id FROM users WHERE email = $1',
+    [email.toLowerCase()]
+  );
   if (existing.rows[0]) {
     return res.status(409).json({ error: 'An account with this email already exists' });
   }
 
-  const hash         = await bcrypt.hash(password, 12);
-  const verifyToken  = crypto.randomBytes(32).toString('hex');
-  const verifyExpiry = new Date(Date.now() + 24 * 3600 * 1000); // 24h
+  const hash        = await bcrypt.hash(password, 12);
+  const verifyToken = crypto.randomBytes(32).toString('hex');
+  const verifyExp   = new Date(Date.now() + 24 * 3600 * 1000);
 
   const result = await query(
     `INSERT INTO users (email, password_hash, display_name, email_verify_token, email_verify_expires)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING id, email, display_name, is_premium`,
-    [email.toLowerCase(), hash, displayName.trim(), verifyToken, verifyExpiry]
+    [email.toLowerCase(), hash, displayName.trim(), verifyToken, verifyExp]
   );
 
   const user  = result.rows[0];
   const token = makeToken(user.id, user.email);
 
-  // Send verification email (non-blocking — don't fail registration if email fails)
-  sendVerificationEmail(email, verifyToken).catch(e =>
-    console.error('Verification email failed:', e.message)
-  );
+  // Send verification email (non-blocking)
+  sendVerificationEmail(email, verifyToken)
+    .then(r => {
+      if (r.preview) console.log('📧 Email preview:', r.preview);
+      else if (r.ok) console.log(`📧 Verification email sent to ${email}`);
+      else console.error('📧 Email failed:', r.error);
+    })
+    .catch(e => console.error('📧 Email error:', e.message));
 
-  console.log(`✅ New user registered: ${email}`);
+  console.log(`✅ New user registered: ${email} (${displayName.trim()})`);
   res.status(201).json({ user, token });
 }
 
-// ─── Login ─────────────────────────────────────────────────────────────────
+// ── Login ─────────────────────────────────────────────────────────────────────
 export async function login(req, res) {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -65,13 +72,12 @@ export async function login(req, res) {
   );
 
   const user = result.rows[0];
-  if (!user)          return res.status(401).json({ error: 'Invalid email or password' });
-  if (!user.is_active) return res.status(403).json({ error: 'Your account has been disabled' });
+  if (!user)             return res.status(401).json({ error: 'Invalid email or password' });
+  if (!user.is_active)   return res.status(403).json({ error: 'Your account has been disabled' });
 
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
 
-  // Update last_login
   await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
 
   delete user.password_hash;
@@ -81,30 +87,36 @@ export async function login(req, res) {
   res.json({ user, token });
 }
 
-// ─── Get current user ──────────────────────────────────────────────────────
+// ── Get current user ──────────────────────────────────────────────────────────
 export async function getMe(req, res) {
   const cacheKey = `user:profile:${req.userId}`;
-  let user = await cacheGet(cacheKey);
+  // Always invalidate cache so we get fresh data
+  await cacheDel(cacheKey);
 
-  if (!user) {
-    const result = await query(
-      `SELECT u.id, u.email, u.display_name, u.avatar_url, u.is_premium,
-         u.email_verified, u.preferences,
-         (SELECT COUNT(*) FROM liked_tracks WHERE user_id=u.id)::int AS liked_count,
-         (SELECT COUNT(*) FROM playlists     WHERE user_id=u.id)::int AS playlist_count,
-         (SELECT COUNT(*) FROM play_history  WHERE user_id=u.id)::int AS plays_count
-       FROM users u WHERE u.id = $1 AND u.is_active = TRUE`,
-      [req.userId]
-    );
-    if (!result.rows[0]) return res.status(404).json({ error: 'User not found' });
-    user = result.rows[0];
-    await cacheSet(cacheKey, user, 300);
-  }
+  const result = await query(
+    `SELECT
+       u.id,
+       u.email,
+       u.display_name,
+       u.avatar_url,
+       u.is_premium,
+       u.preferences,
+       (SELECT COUNT(*) FROM liked_tracks WHERE user_id = u.id)::int  AS liked_count,
+       (SELECT COUNT(*) FROM playlists     WHERE user_id = u.id)::int AS playlist_count,
+       (SELECT COUNT(*) FROM play_history  WHERE user_id = u.id)::int AS plays_count
+     FROM users u
+     WHERE u.id = $1 AND u.is_active = TRUE`,
+    [req.userId]
+  );
 
+  if (!result.rows[0]) return res.status(404).json({ error: 'User not found' });
+
+  const user = result.rows[0];
+  await cacheSet(cacheKey, user, 300);
   res.json(user);
 }
 
-// ─── Update profile ────────────────────────────────────────────────────────
+// ── Update profile ────────────────────────────────────────────────────────────
 export async function updateProfile(req, res) {
   const { displayName, preferences } = req.body;
 
@@ -127,34 +139,38 @@ export async function updateProfile(req, res) {
   res.json(result.rows[0]);
 }
 
-// ─── Forgot password ────────────────────────────────────────────────────────
+// ── Forgot password ───────────────────────────────────────────────────────────
 export async function forgotPassword(req, res) {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   // Always return 200 to prevent user enumeration
-  const result = await query('SELECT id FROM users WHERE email = $1 AND is_active = TRUE', [email.toLowerCase()]);
+  const result = await query(
+    'SELECT id FROM users WHERE email = $1 AND is_active = TRUE',
+    [email.toLowerCase()]
+  );
 
   if (result.rows[0]) {
     const token   = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 3600 * 1000); // 1 hour
+    const expires = new Date(Date.now() + 3600 * 1000);
 
     await query(
       'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
       [token, expires, result.rows[0].id]
     );
 
-    // Send reset email
-    const { ok, preview } = await sendPasswordResetEmail(email, token);
-    if (!ok) console.error(`Reset email failed for ${email}`);
-    if (preview) console.log(`📧 Reset email preview: ${preview}`);
+    sendPasswordResetEmail(email, token)
+      .then(r => {
+        if (r.preview) console.log('📧 Reset email preview:', r.preview);
+        else console.log(`📧 Reset email sent to ${email}`);
+      })
+      .catch(e => console.error('📧 Reset email error:', e.message));
   }
 
-  // Always same response
   res.json({ message: 'If that email is registered, a password reset link has been sent.' });
 }
 
-// ─── Reset password ─────────────────────────────────────────────────────────
+// ── Reset password ────────────────────────────────────────────────────────────
 export async function resetPassword(req, res) {
   const { token, password } = req.body;
   if (!token || !password) {
@@ -166,7 +182,9 @@ export async function resetPassword(req, res) {
 
   const result = await query(
     `SELECT id FROM users
-     WHERE reset_token = $1 AND reset_token_expires > NOW() AND is_active = TRUE`,
+     WHERE reset_token = $1
+       AND reset_token_expires > NOW()
+       AND is_active = TRUE`,
     [token]
   );
 
@@ -188,17 +206,19 @@ export async function resetPassword(req, res) {
   await cacheDel(`user:profile:${result.rows[0].id}`);
   await cacheDel(`user:jwt:${result.rows[0].id}`);
 
-  res.json({ message: 'Password has been reset successfully. You can now sign in.' });
+  res.json({ message: 'Password reset successfully. You can now sign in.' });
 }
 
-// ─── Verify email ────────────────────────────────────────────────────────────
+// ── Verify email ──────────────────────────────────────────────────────────────
 export async function verifyEmail(req, res) {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: 'Token is required' });
 
   const result = await query(
     `UPDATE users
-     SET email_verified = TRUE, email_verify_token = NULL, email_verify_expires = NULL
+     SET email_verified       = TRUE,
+         email_verify_token   = NULL,
+         email_verify_expires = NULL
      WHERE email_verify_token = $1
        AND (email_verify_expires IS NULL OR email_verify_expires > NOW())
      RETURNING id`,
@@ -213,31 +233,28 @@ export async function verifyEmail(req, res) {
   res.json({ message: 'Email verified successfully! You can now sign in.' });
 }
 
-// ─── Resend verification email ───────────────────────────────────────────────
+// ── Resend verification ───────────────────────────────────────────────────────
 export async function resendVerification(req, res) {
-  const userId = req.userId;
-
   const result = await query(
-    'SELECT email, email_verified FROM users WHERE id = $1',
-    [userId]
+    'SELECT email FROM users WHERE id = $1',
+    [req.userId]
   );
   const user = result.rows[0];
-  if (!user)               return res.status(404).json({ error: 'User not found' });
-  if (user.email_verified) return res.status(400).json({ error: 'Email is already verified' });
+  if (!user) return res.status(404).json({ error: 'User not found' });
 
   const token   = crypto.randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + 24 * 3600 * 1000);
 
   await query(
     'UPDATE users SET email_verify_token = $1, email_verify_expires = $2 WHERE id = $3',
-    [token, expires, userId]
+    [token, expires, req.userId]
   );
 
   await sendVerificationEmail(user.email, token);
   res.json({ message: 'Verification email resent.' });
 }
 
-// ─── Delete account ──────────────────────────────────────────────────────────
+// ── Delete account ────────────────────────────────────────────────────────────
 export async function deleteAccount(req, res) {
   await query('UPDATE users SET is_active = FALSE WHERE id = $1', [req.userId]);
   await cacheDel(`user:profile:${req.userId}`);

@@ -18,8 +18,11 @@ import ProfilePage  from './pages/ProfilePage.jsx';
 
 function Spinner() {
   return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0e0e0e' }}>
-      <div style={{ width:36, height:36, border:'2px solid rgba(199,153,255,0.2)', borderTopColor:'#c799ff', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
+      height:'100vh', background:'var(--color-background)' }}>
+      <div style={{ width:34, height:34, border:'2px solid rgba(199,153,255,0.2)',
+        borderTopColor:'var(--color-primary)', borderRadius:'50%',
+        animation:'spin 0.8s linear infinite' }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -27,14 +30,14 @@ function Spinner() {
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuthStore();
-  if (loading) return <Spinner />;
-  return user ? children : <Navigate to="/login" replace />;
+  if (loading) return <Spinner/>;
+  return user ? children : <Navigate to="/login" replace/>;
 }
 
 function PublicRoute({ children }) {
   const { user, loading } = useAuthStore();
-  if (loading) return <Spinner />;
-  return user ? <Navigate to="/" replace /> : children;
+  if (loading) return <Spinner/>;
+  return user ? <Navigate to="/" replace/> : children;
 }
 
 export default function App() {
@@ -42,28 +45,33 @@ export default function App() {
   const { initListeners, setLiked } = usePlayerStore();
 
   useEffect(() => {
-    init().then(() => {
-      libraryApi.getLiked().then(t => setLiked(t.map(x => x.id))).catch(() => {});
-    });
     initListeners();
+    init().then(() => {
+      const { user } = useAuthStore.getState();
+      if (user) {
+        libraryApi.getLiked()
+          .then(tracks => setLiked((tracks||[]).map(x=>x.id)))
+          .catch(()=>{});
+      }
+    });
   }, []);
 
   return (
     <Routes>
-      <Route element={<AuthLayout />}>
-        <Route path="/login"    element={<PublicRoute><LoginPage /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
-        <Route path="/forgot"   element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+      <Route element={<AuthLayout/>}>
+        <Route path="/login"    element={<PublicRoute><LoginPage/></PublicRoute>}/>
+        <Route path="/register" element={<PublicRoute><RegisterPage/></PublicRoute>}/>
+        <Route path="/forgot"   element={<PublicRoute><ForgotPasswordPage/></PublicRoute>}/>
       </Route>
-      <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
-        <Route index               element={<HomePage />} />
-        <Route path="/search"      element={<SearchPage />} />
-        <Route path="/library"     element={<LibraryPage />} />
-        <Route path="/library/:tab" element={<LibraryPage />} />
-        <Route path="/playlist/:id" element={<PlaylistPage />} />
-        <Route path="/podcasts"    element={<PodcastPage />} />
-        <Route path="/profile"     element={<ProfilePage />} />
-        <Route path="*"            element={<Navigate to="/" replace />} />
+      <Route element={<PrivateRoute><AppLayout/></PrivateRoute>}>
+        <Route index                element={<HomePage/>}/>
+        <Route path="/search"       element={<SearchPage/>}/>
+        <Route path="/library"      element={<LibraryPage/>}/>
+        <Route path="/library/:tab" element={<LibraryPage/>}/>
+        <Route path="/playlist/:id" element={<PlaylistPage/>}/>
+        <Route path="/podcasts"     element={<PodcastPage/>}/>
+        <Route path="/profile"      element={<ProfilePage/>}/>
+        <Route path="*"             element={<Navigate to="/" replace/>}/>
       </Route>
     </Routes>
   );

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Heart, ListMusic, History, X } from 'lucide-react';
+import { Plus, Heart, ListMusic, History } from 'lucide-react';
+import Modal from '../components/Modal.jsx';
 import toast from 'react-hot-toast';
+import useT from '../i18n/useT.js';
 import { playlistApi, libraryApi, historyApi } from '../api/client.js';
 import TrackRow from '../components/TrackRow.jsx';
 

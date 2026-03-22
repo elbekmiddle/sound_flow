@@ -1,111 +1,190 @@
-import ytdl from 'ytdl-core';
+/**
+ * musicController.js — Sound Flow
+ * @distube/ytdl-core with proper headers to bypass age/sign-in restrictions
+ */
+import ytdl from '@distube/ytdl-core';
 import { cacheGet, cacheSet } from '../config/redis.js';
-import { query } from '../config/database.js';
+import { query }              from '../config/database.js';
 
-// yt-search ESM-compatible import
-let ytSearch;
-async function getYtSearch() {
-  if (!ytSearch) {
-    const mod = await import('yt-search');
-    ytSearch = mod.default ?? mod;
+let _ytSearch;
+async function ytSearch(opts) {
+  if (!_ytSearch) {
+    const m = await import('yt-search');
+    _ytSearch = m.default ?? m;
   }
-  return ytSearch;
+  return _ytSearch(opts);
 }
 
-const SEARCH_TTL = 600;
-const INFO_TTL   = 3600;
-const TREND_TTL  = 1800;
+// ── Request headers to look like a real browser ────────────────────────────
+const YT_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+};
 
-// ─── Search ───────────────────────────────────────────────
+const YTDL_OPTS = {
+  requestOptions: { headers: YT_HEADERS },
+};
+
+// Duration filters (seconds)
+const MIN_MUSIC = 60, MAX_MUSIC = 900;
+const MIN_PODCAST = 300, MAX_PODCAST = 10800;
+
+const isAudio   = v => (v.seconds >= MIN_MUSIC && v.seconds <= MAX_MUSIC) ||
+                       (v.seconds >= MIN_PODCAST && v.seconds <= MAX_PODCAST);
+const trackType = v => v.seconds > MAX_MUSIC ? 'podcast' : 'music';
+
+const mapVideo = v => ({
+  id: v.videoId, title: v.title,
+  artist: v.author?.name || 'Unknown',
+  duration: v.seconds, durationStr: v.timestamp,
+  thumbnail: v.thumbnail, views: v.views,
+  type: trackType(v),
+});
+
+// ── Search ─────────────────────────────────────────────────────────────────
 export async function search(req, res) {
-  const q      = req.query.q?.trim();
-  const limit  = parseInt(req.query.limit)  || 20;
-  const offset = parseInt(req.query.offset) || 0;
-
+  const q     = req.query.q?.trim();
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const off   = Math.max(parseInt(req.query.offset) || 0, 0);
   if (!q) return res.status(400).json({ error: 'Query required' });
 
-  const cacheKey = `search:${q.toLowerCase()}:${limit}:${offset}`;
-  const cached   = await cacheGet(cacheKey);
+  const ck = `search:v5:${q.toLowerCase()}:${limit}:${off}`;
+  const cached = await cacheGet(ck);
   if (cached) return res.json({ results: cached, source: 'cache' });
 
   try {
-    const yt = await getYtSearch();
-    const { videos } = await yt({ query: q, pageStart: 1, pageEnd: 2 });
-
-    const results = videos
-      .filter(v => v.seconds > 30 && v.seconds < 3600)
-      .slice(offset, offset + limit)
-      .map(v => ({
-        id:          v.videoId,
-        title:       v.title,
-        artist:      v.author?.name || 'Unknown',
-        duration:    v.seconds,
-        durationStr: v.timestamp,
-        thumbnail:   v.thumbnail,
-        views:       v.views,
-      }));
-
-    await cacheSet(cacheKey, results, SEARCH_TTL);
-
+    const r = await ytSearch({ query: q, pageStart: 1, pageEnd: 2 });
+    const results = (r.videos || []).filter(isAudio).slice(off, off + limit).map(mapVideo);
+    await cacheSet(ck, results, 600);
     if (req.userId) {
-      await query(
-        'INSERT INTO search_history (user_id, query, result_count) VALUES ($1, $2, $3)',
-        [req.userId, q, results.length]
-      ).catch(() => {});
+      query('INSERT INTO search_history (user_id, query, result_count) VALUES ($1,$2,$3)',
+        [req.userId, q, results.length]).catch(() => {});
     }
-
-    res.json({ results, total: videos.length, query: q });
+    res.json({ results, total: results.length, query: q });
   } catch (err) {
     console.error('Search error:', err.message);
-    res.status(500).json({ error: 'Search failed', detail: err.message });
+    res.status(500).json({ error: 'Search failed. Try again.' });
   }
 }
 
-// ─── Stream ───────────────────────────────────────────────
+// ── Suggestions ───────────────────────────────────────────────────────────
+export async function getSuggestions(req, res) {
+  const q = req.query.q?.trim();
+  if (!q) return res.json([]);
+  const ck = `sugg:v5:${q.toLowerCase()}`;
+  const cached = await cacheGet(ck);
+  if (cached) return res.json(cached);
+  try {
+    const r = await ytSearch({ query: q, pageStart: 1, pageEnd: 1 });
+    const s = (r.videos || []).filter(isAudio).slice(0, 8)
+      .map(v => ({ id: v.videoId, title: v.title, artist: v.author?.name || 'Unknown' }));
+    await cacheSet(ck, s, 300);
+    res.json(s);
+  } catch { res.json([]); }
+}
+
+// ── Trending ──────────────────────────────────────────────────────────────
+export async function getTrending(req, res) {
+  const ck = 'trend:v5';
+  const cached = await cacheGet(ck);
+  if (cached) return res.json(cached);
+  try {
+    const r = await ytSearch('trending music 2025');
+    const results = (r.videos || [])
+      .filter(v => v.seconds >= MIN_MUSIC && v.seconds <= MAX_MUSIC)
+      .slice(0, 24).map(mapVideo);
+    await cacheSet(ck, results, 1800);
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get trending.' });
+  }
+}
+
+// ── Recommendations (based on search history) ─────────────────────────────
+export async function getRecommendations(req, res) {
+  if (!req.userId) return res.json([]);
+  const hist = await query(
+    'SELECT query FROM search_history WHERE user_id=$1 ORDER BY searched_at DESC LIMIT 5',
+    [req.userId]
+  ).catch(() => ({ rows: [] }));
+
+  const queries = hist.rows.map(r => r.query);
+  if (!queries.length) return getTrending(req, res);
+
+  const ck = `rec:v5:${req.userId}:${queries[0]}`;
+  const cached = await cacheGet(ck);
+  if (cached) return res.json(cached);
+
+  try {
+    const r = await ytSearch(`${queries[0]} music`);
+    const results = (r.videos || [])
+      .filter(v => v.seconds >= MIN_MUSIC && v.seconds <= MAX_MUSIC)
+      .slice(0, 12).map(mapVideo);
+    await cacheSet(ck, results, 1200);
+    res.json(results);
+  } catch { res.json([]); }
+}
+
+// ── Stream ────────────────────────────────────────────────────────────────
 export async function stream(req, res) {
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'Video ID required' });
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) return res.status(400).json({ error: 'Invalid video ID' });
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) return res.status(400).json({ error: 'Invalid ID' });
 
   const url = `https://www.youtube.com/watch?v=${id}`;
 
   try {
-    const info = await ytdl.getInfo(url);
+    const info = await ytdl.getInfo(url, YTDL_OPTS);
+    const details = info.videoDetails;
 
-    const format = ytdl.chooseFormat(info.formats, {
-      quality: 'highestaudio',
-      filter:  'audioonly',
-    });
-
-    if (!format) return res.status(404).json({ error: 'No audio format available' });
-
-    res.setHeader('Content-Type', format.mimeType || 'audio/webm;codecs=opus');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', `public, max-age=${TREND_TTL}`);
-    res.setHeader('X-Track-Title', encodeURIComponent(info.videoDetails.title));
-    // Allow browser (HTTPS page) to read headers
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, X-Track-Title');
-
-    if (format.contentLength) res.setHeader('Content-Length', format.contentLength);
-
-    // Range request support (for seeking)
-    const rangeHeader = req.headers.range;
-    let streamOpts = { format };
-
-    if (rangeHeader && format.contentLength) {
-      const size  = parseInt(format.contentLength);
-      const parts = rangeHeader.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end   = parts[1] ? parseInt(parts[1], 10) : size - 1;
-      res.status(206);
-      res.setHeader('Content-Range',  `bytes ${start}-${end}/${size}`);
-      res.setHeader('Content-Length', end - start + 1);
-      streamOpts.range = { start, end };
+    // Check duration — skip videos that are too short (likely not music)
+    const duration = parseInt(details.lengthSeconds || '0');
+    if (duration < 30) {
+      return res.status(400).json({ error: 'Video too short to stream as audio' });
     }
 
-    const audioStream = ytdl.downloadFromInfo(info, streamOpts);
-    audioStream.on('error', (err) => {
+    // Format priority: opus (best for streaming) → webm audio → mp4 audio → any audio
+    const formats = info.formats.filter(f => f.hasAudio);
+    let format =
+      formats.find(f => f.audioCodec?.includes('opus') && !f.hasVideo)   ||
+      formats.find(f => f.container === 'webm' && !f.hasVideo)            ||
+      formats.find(f => f.container === 'mp4'  && !f.hasVideo)            ||
+      formats.find(f => !f.hasVideo)                                       ||
+      formats.sort((a,b) => (parseInt(b.audioBitrate)||0) - (parseInt(a.audioBitrate)||0))[0];
+
+    if (!format) {
+      return res.status(451).json({ error: 'No streamable audio format for this video' });
+    }
+
+    const mimeType  = format.mimeType?.split(';')[0] || 'audio/webm';
+    const cLen      = format.contentLength ? parseInt(format.contentLength) : null;
+
+    res.setHeader('Content-Type',   mimeType);
+    res.setHeader('Accept-Ranges',  'bytes');
+    res.setHeader('Cache-Control',  'public, max-age=1800');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('X-Track-Title',  encodeURIComponent(details.title));
+    res.setHeader('X-Track-Artist', encodeURIComponent(details.author?.name || ''));
+    res.setHeader('X-Track-Duration', details.lengthSeconds || '0');
+    if (cLen) res.setHeader('Content-Length', cLen);
+
+    // Range support for seeking
+    const rangeHeader = req.headers.range;
+    let dlOpts = { ...YTDL_OPTS, format };
+
+    if (rangeHeader && cLen) {
+      const [s, e] = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(s, 10);
+      const end   = e ? parseInt(e, 10) : cLen - 1;
+      res.status(206);
+      res.setHeader('Content-Range',  `bytes ${start}-${end}/${cLen}`);
+      res.setHeader('Content-Length', end - start + 1);
+      dlOpts.range = { start, end };
+    }
+
+    const audioStream = ytdl.downloadFromInfo(info, dlOpts);
+    audioStream.on('error', err => {
       console.error('Stream pipe error:', err.message);
       if (!res.headersSent) res.status(500).end();
     });
@@ -114,98 +193,31 @@ export async function stream(req, res) {
 
   } catch (err) {
     console.error('Stream error:', err.message);
-    if (err.message.includes('unavailable')) return res.status(404).json({ error: 'Video unavailable' });
+    if (err.message.includes('unavailable') || err.message.includes('private'))
+      return res.status(404).json({ error: 'Video unavailable or private' });
+    if (err.message.includes('playable') || err.message.includes('extract') || err.message.includes('formats'))
+      return res.status(451).json({ error: 'Video cannot be streamed (restricted)' });
     if (!res.headersSent) res.status(500).json({ error: 'Stream failed' });
   }
 }
 
-// ─── Track info ───────────────────────────────────────────
+// ── Info ──────────────────────────────────────────────────────────────────
 export async function getInfo(req, res) {
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'Video ID required' });
-
-  const cacheKey = `track:info:${id}`;
-  const cached   = await cacheGet(cacheKey);
+  const cached = await cacheGet(`info:v5:${id}`);
   if (cached) return res.json(cached);
-
   try {
-    const info    = await ytdl.getInfo(`https://www.youtube.com/watch?v=${id}`);
-    const details = info.videoDetails;
-
-    const track = {
-      id,
-      title:     details.title,
-      artist:    details.author.name,
-      duration:  parseInt(details.lengthSeconds),
-      thumbnail: details.thumbnails.at(-1)?.url,
-      views:     parseInt(details.viewCount),
-    };
-
-    await query(
-      `INSERT INTO tracks (youtube_id, title, artist, duration, thumbnail_url)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (youtube_id) DO UPDATE
-       SET title=$2, artist=$3, duration=$4, thumbnail_url=$5, updated_at=NOW()`,
-      [id, track.title, track.artist, track.duration, track.thumbnail]
-    ).catch(() => {});
-
-    await cacheSet(cacheKey, track, INFO_TTL);
+    const info = await ytdl.getInfo(`https://www.youtube.com/watch?v=${id}`, YTDL_OPTS);
+    const d    = info.videoDetails;
+    const track = { id, title: d.title, artist: d.author.name,
+      duration: parseInt(d.lengthSeconds), thumbnail: d.thumbnails?.at(-1)?.url };
+    query(`INSERT INTO tracks (youtube_id,title,artist,duration,thumbnail_url)
+      VALUES ($1,$2,$3,$4,$5) ON CONFLICT (youtube_id) DO UPDATE SET updated_at=NOW()`,
+      [id, track.title, track.artist, track.duration, track.thumbnail]).catch(()=>{});
+    await cacheSet(`info:v5:${id}`, track, 3600);
     res.json(track);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to get info', detail: err.message });
-  }
-}
-
-// ─── Trending ─────────────────────────────────────────────
-export async function getTrending(req, res) {
-  const cacheKey = 'trending:music:v2';
-  const cached   = await cacheGet(cacheKey);
-  if (cached) return res.json(cached);
-
-  try {
-    const yt = await getYtSearch();
-    const { videos } = await yt('trending music 2025');
-
-    const results = videos
-      .filter(v => v.seconds > 60 && v.seconds < 600)
-      .slice(0, 24)
-      .map(v => ({
-        id:        v.videoId,
-        title:     v.title,
-        artist:    v.author?.name || 'Unknown',
-        duration:  v.seconds,
-        thumbnail: v.thumbnail,
-      }));
-
-    await cacheSet(cacheKey, results, TREND_TTL);
-    res.json(results);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to get trending', detail: err.message });
-  }
-}
-
-// ─── Autocomplete suggestions ─────────────────────────────
-export async function getSuggestions(req, res) {
-  const q = req.query.q?.trim();
-  if (!q || q.length < 2) return res.json([]);
-
-  const cacheKey = `suggest:${q.toLowerCase()}`;
-  const cached   = await cacheGet(cacheKey);
-  if (cached) return res.json(cached);
-
-  try {
-    const yt = await getYtSearch();
-    const { videos } = await yt({ query: q, pageStart: 1, pageEnd: 1 });
-
-    const suggestions = videos.slice(0, 8).map(v => ({
-      id:     v.videoId,
-      title:  v.title,
-      artist: v.author?.name || 'Unknown',
-    }));
-
-    await cacheSet(cacheKey, suggestions, 300);
-    res.json(suggestions);
-  } catch {
-    res.json([]);
+    res.status(500).json({ error: 'Failed to get info' });
   }
 }

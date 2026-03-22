@@ -3,12 +3,12 @@
 // Uses Offscreen API for persistent audio playback (MV3)
 // ============================================================
 
-const API_BASE = 'http://localhost:5000';   // Change to production URL
+const API_BASE = 'http://localhost:5001';   // Change to production URL
 
 let offscreenCreated = false;
-let currentTrack     = null;
-let isPlaying        = false;
-let volume           = 0.8;
+let currentTrack = null;
+let isPlaying = false;
+let volume = 0.8;
 
 // ── Create offscreen document (required for audio in MV3) ──
 async function ensureOffscreen() {
@@ -24,7 +24,7 @@ async function ensureOffscreen() {
   }
 
   await chrome.offscreen.createDocument({
-    url:     chrome.runtime.getURL('offscreen.html'),
+    url: chrome.runtime.getURL('offscreen.html'),
     reasons: ['AUDIO_PLAYBACK'],
     justification: 'Required for background music playback',
   });
@@ -47,7 +47,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'PLAY': {
         await ensureOffscreen();
         currentTrack = msg.track;
-        isPlaying    = true;
+        isPlaying = true;
         const streamUrl = `${API_BASE}/api/music/stream?id=${msg.track.id}`;
         toOffscreen({ type: 'PLAY', url: streamUrl, volume, track: msg.track });
         updateBadge(true);
@@ -72,7 +72,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case 'STOP': {
-        isPlaying    = false;
+        isPlaying = false;
         currentTrack = null;
         toOffscreen({ type: 'STOP' });
         updateBadge(false);
@@ -139,13 +139,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.from === 'offscreen' && msg.type === 'PROGRESS') {
     // Forward to popup if open
-    chrome.runtime.sendMessage({ ...msg, target: 'popup' }).catch(() => {});
+    chrome.runtime.sendMessage({ ...msg, target: 'popup' }).catch(() => { });
   }
 
   if (msg.from === 'offscreen' && msg.type === 'TRACK_ENDED') {
     isPlaying = false;
     updateBadge(false);
-    chrome.runtime.sendMessage({ type: 'TRACK_ENDED', target: 'popup' }).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'TRACK_ENDED', target: 'popup' }).catch(() => { });
   }
 });
 

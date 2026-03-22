@@ -8,7 +8,9 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "db:migrate": "node utils/migrate.js",
-    "db:seed": "node utils/seed.js"
+    "db:seed": "node utils/seed.js",
+    "predev": "node utils/migrate.js",
+    "prestart": "node utils/migrate.js"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.0",
@@ -27,7 +29,9 @@
     "redis": "^4.6.10",
     "uuid": "^9.0.1",
     "yt-search": "^2.10.4",
-    "ytdl-core": "^4.11.5"
+    "@distube/ytdl-core": "^4.14.4",
+    "cloudinary": "^2.3.1",
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

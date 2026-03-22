@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Radio, Play } from 'lucide-react';
-import { podcastApi } from '../api/client.js';
+import { podcastApi, musicApi } from '../api/client.js';
+import usePlayerStore from '../store/playerStore.js';
+import TrackRow from '../components/TrackRow.jsx';
+import useT from '../i18n/useT.js';
 
 const GRADS = [
   'linear-gradient(135deg,rgba(245,158,11,.6),#78350f)',
@@ -12,106 +15,87 @@ const GRADS = [
   'linear-gradient(135deg,rgba(6,182,212,.4),#0a2a3d)',
 ];
 
-const DEMO = [
-  { id:'p1', name:'Lex Fridman Podcast', description:'AI, science, technology, history & philosophy.', episode_count:380 },
-  { id:'p2', name:'The Joe Rogan Experience', description:'Long-form conversations on comedy, politics, science.', episode_count:2100 },
-  { id:'p3', name:'How I Built This', description:'Guy Raz explores the stories behind great companies.', episode_count:450 },
-  { id:'p4', name:'Darknet Diaries', description:'True stories from the dark side of the internet.', episode_count:140 },
-  { id:'p5', name:'My First Million', description:'Brainstorming business ideas and discussing trends.', episode_count:600 },
-  { id:'p6', name:'The Diary of a CEO', description:'Deep insights from world-class entrepreneurs.', episode_count:200 },
-];
-
 export default function PodcastPage() {
-  const [podcasts, setPodcasts] = useState(null);
-  const [cont, setCont]         = useState([]);
+  const [podcasts,  setPodcasts]  = useState(null);
+  const [podSearch, setPodSearch] = useState(null);
+  const { play } = usePlayerStore();
+  const t = useT();
 
   useEffect(() => {
-    podcastApi.getAll().then(d => setPodcasts(d.length ? d : DEMO)).catch(() => setPodcasts(DEMO));
-    setCont(DEMO.slice(0,2).map(p => ({ ...p, ep:`Episode ${Math.floor(Math.random()*80)+20}`, pct: Math.random()*75+10 })));
+    // Search for podcasts from YouTube (long-form audio 5min–3hr)
+    musicApi.search('podcast uzbek 2025', 20).then(d => {
+      const pods = (d?.results||[]).filter(r=>r.duration>=300);
+      setPodSearch(pods);
+    }).catch(()=>setPodSearch([]));
+
+    podcastApi.getAll().then(d=>setPodcasts(d)).catch(()=>setPodcasts([]));
   }, []);
 
   const C = { text:'var(--color-on-surface)', muted:'var(--color-on-surface-variant)',
-    surf:'var(--color-surface-container)', surfH:'var(--color-surface-container-high)',
-    sec:'var(--color-secondary)' };
+    surf:'var(--color-surface-container)', surfH:'var(--color-surface-container-high)' };
 
   return (
-    <div style={{ padding:'24px 16px 0', maxWidth:1280, margin:'0 auto' }}>
-      <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }}
-        style={{ marginBottom:28 }}>
-        <h1 style={{ fontFamily:'var(--font-headline)', fontWeight:900, fontSize:28, letterSpacing:'-0.03em' }}>Podcasts</h1>
-        <p style={{ color:C.muted, fontSize:13, marginTop:4 }}>Discover and follow shows</p>
+    <div style={{padding:'20px 16px 0',maxWidth:1280,margin:'0 auto'}}>
+      <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} style={{marginBottom:24}}>
+        <h1 style={{fontFamily:'var(--font-headline)',fontWeight:900,fontSize:26,
+          letterSpacing:'-0.03em',color:C.text}}>{t('podcasts')}</h1>
       </motion.div>
 
-      {/* Continue listening */}
-      <section style={{ marginBottom:32 }}>
-        <h2 style={{ fontFamily:'var(--font-headline)', fontWeight:800, fontSize:18, letterSpacing:'-0.02em', marginBottom:14 }}>
-          Continue Listening
-        </h2>
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {cont.map((p,i) => (
-            <motion.div key={p.id} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:i*0.06 }}
-              style={{ display:'flex', alignItems:'center', gap:14, padding:14,
-                background:C.surf, borderRadius:12, cursor:'pointer', transition:'background 0.15s' }}
-              onMouseEnter={e=>e.currentTarget.style.background=C.surfH}
-              onMouseLeave={e=>e.currentTarget.style.background=C.surf}
-            >
-              <div style={{ width:56, height:56, borderRadius:10, flexShrink:0,
-                background:GRADS[i%GRADS.length], display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <Radio size={22} color="rgba(255,255,255,0.7)" />
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontWeight:600, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</p>
-                <p style={{ fontSize:11, color:C.muted, marginTop:2 }}>{p.ep}</p>
-                <div style={{ marginTop:8, height:3, background:'var(--color-surface-container-highest)', borderRadius:99, overflow:'hidden' }}>
-                  <div style={{ height:'100%', background:C.sec, borderRadius:99, width:`${p.pct}%`, transition:'width 0.3s' }} />
-                </div>
-              </div>
-              <button style={{ width:38, height:38, borderRadius:'50%', flexShrink:0,
-                background:'var(--color-surface-container-high)', border:'none', cursor:'pointer',
-                display:'flex', alignItems:'center', justifyContent:'center', transition:'background 0.15s' }}
-                onMouseEnter={e=> { e.currentTarget.style.background='rgba(199,153,255,0.15)'; }}
-                onMouseLeave={e=> { e.currentTarget.style.background='var(--color-surface-container-high)'; }}>
-                <Play size={16} fill="var(--color-on-surface)" color="var(--color-on-surface)" style={{ marginLeft:2 }} />
-              </button>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+      {/* Podcast search results (YouTube long-form) */}
+      <section style={{marginBottom:28}}>
+        <h2 style={{fontFamily:'var(--font-headline)',fontWeight:800,fontSize:18,
+          marginBottom:14,color:C.text}}>{t('popularShows')}</h2>
 
-      {/* Popular shows */}
-      <section style={{ marginBottom:32 }}>
-        <h2 style={{ fontFamily:'var(--font-headline)', fontWeight:800, fontSize:18, letterSpacing:'-0.02em', marginBottom:14 }}>
-          Popular Shows
-        </h2>
-        {podcasts===null ? (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(155px,1fr))', gap:14 }}>
-            {Array(6).fill(0).map((_,i)=><div key={i} className="skeleton" style={{ aspectRatio:'0.85', borderRadius:12 }} />)}
+        {podSearch===null ? (
+          <div style={{display:'flex',flexDirection:'column',gap:3}}>
+            {Array(5).fill(0).map((_,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px'}}>
+                <div className="skeleton" style={{width:26,height:12}}/>
+                <div className="skeleton" style={{width:38,height:38}}/>
+                <div style={{flex:1}}>
+                  <div className="skeleton" style={{height:11,width:'55%',marginBottom:5}}/>
+                  <div className="skeleton" style={{height:9,width:'30%'}}/>
+                </div>
+              </div>
+            ))}
           </div>
+        ) : podSearch.length===0 ? (
+          <p style={{color:C.muted,fontSize:13}}>No podcasts found.</p>
         ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(155px,1fr))', gap:14 }}>
-            {podcasts.map((p,i) => (
-              <motion.button key={p.id}
-                initial={{ opacity:0, scale:0.95 }} animate={{ opacity:1, scale:1 }} transition={{ delay:0.06+i*0.04 }}
-                style={{ background:C.surf, borderRadius:12, overflow:'hidden', border:'none', cursor:'pointer', textAlign:'left',
-                  transition:'transform 0.2s, background 0.2s' }}
-                onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.background=C.surfH; }}
-                onMouseLeave={e=>{ e.currentTarget.style.transform='translateY(0)';    e.currentTarget.style.background=C.surf; }}
-              >
-                <div style={{ width:'100%', aspectRatio:'1', background:GRADS[i%GRADS.length],
-                  display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <Radio size={44} color="rgba(255,255,255,0.25)" />
-                </div>
-                <div style={{ padding:'10px 12px 12px' }}>
-                  <p style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</p>
-                  {p.episode_count && (
-                    <p style={{ fontSize:11, color:C.muted, marginTop:2 }}>{p.episode_count} episodes</p>
-                  )}
-                </div>
-              </motion.button>
+          <div style={{display:'flex',flexDirection:'column',gap:2}}>
+            {podSearch.map((track,i)=>(
+              <TrackRow key={track.id} track={track} index={i} queue={podSearch} isMusic={true}/>
             ))}
           </div>
         )}
       </section>
+
+      {/* DB podcasts if any */}
+      {podcasts&&podcasts.length>0&&(
+        <section style={{marginBottom:28}}>
+          <h2 style={{fontFamily:'var(--font-headline)',fontWeight:800,fontSize:18,
+            marginBottom:14,color:C.text}}>Shows</h2>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(148px,1fr))',gap:12}}>
+            {podcasts.map((p,i)=>(
+              <motion.button key={p.id}
+                initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} transition={{delay:i*0.04}}
+                style={{background:C.surf,borderRadius:10,overflow:'hidden',border:'none',cursor:'pointer',textAlign:'left',
+                  transition:'transform 0.2s,background 0.15s'}}
+                onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.background=C.surfH;}}
+                onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.background=C.surf;}}>
+                <div style={{width:'100%',aspectRatio:'1',background:GRADS[i%GRADS.length],
+                  display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <Radio size={40} color="rgba(255,255,255,0.25)"/>
+                </div>
+                <div style={{padding:'8px 10px 10px'}}>
+                  <p style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{p.name}</p>
+                  {p.episode_count&&<p style={{fontSize:10,color:C.muted,marginTop:2}}>{p.episode_count} {t('episodes')}</p>}
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

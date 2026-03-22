@@ -60,7 +60,7 @@ CORS_ORIGIN=http://localhost:5173
 
 ### Frontend `.env`
 ```
-VITE_API_URL=http://localhost:5000
+VITE_API_URL=http://localhost:5001
 VITE_FIREBASE_API_KEY=xxx
 VITE_FIREBASE_AUTH_DOMAIN=xxx.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=xxx

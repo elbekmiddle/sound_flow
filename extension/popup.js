@@ -2,22 +2,22 @@
 // Obsidian Audio — Popup Script
 // ============================================================
 
-const API_BASE = 'http://localhost:5000';
+const API_BASE = 'http://localhost:5001';
 
 let state = {
-  isPlaying:    false,
+  isPlaying: false,
   currentTrack: null,
-  queue:        [],
-  queueIndex:   0,
-  shuffle:      false,
-  liked:        new Set(),
+  queue: [],
+  queueIndex: 0,
+  shuffle: false,
+  liked: new Set(),
 };
 
 // ── DOM refs ─────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
 const views = {
-  login:  $('view-login'),
+  login: $('view-login'),
   player: $('view-player'),
   search: $('view-search'),
 };
@@ -33,7 +33,7 @@ async function init() {
     // Get current playback state from background
     const bgState = await sendMsg({ type: 'GET_STATE' });
     if (bgState) {
-      state.isPlaying    = bgState.isPlaying;
+      state.isPlaying = bgState.isPlaying;
       state.currentTrack = bgState.currentTrack;
       updatePlayerUI();
     }
@@ -62,22 +62,22 @@ $('login-btn').addEventListener('click', handleLogin);
 $('login-password').addEventListener('keydown', e => e.key === 'Enter' && handleLogin());
 
 async function handleLogin() {
-  const email    = $('login-email').value.trim();
+  const email = $('login-email').value.trim();
   const password = $('login-password').value;
-  const errEl    = $('login-err');
-  const btn      = $('login-btn');
+  const errEl = $('login-err');
+  const btn = $('login-btn');
 
   if (!email || !password) { errEl.textContent = 'Please fill in all fields'; return; }
   errEl.textContent = '';
-  btn.disabled     = true;
-  btn.textContent  = 'Signing in...';
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
 
   try {
     // Use our backend JWT directly (no Firebase SDK in extension)
     const res = await fetch(`${API_BASE}/api/auth/login-jwt`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password }),
     });
     const data = await res.json();
 
@@ -88,7 +88,7 @@ async function handleLogin() {
     showView('player');
   } catch (err) {
     errEl.textContent = err.message || 'Sign in failed';
-    btn.disabled  = false;
+    btn.disabled = false;
     btn.textContent = 'Sign In';
   }
 }
@@ -143,7 +143,7 @@ $('progress-bar').addEventListener('input', (e) => {
 async function playTrack(track, queue) {
   if (queue) { state.queue = queue; state.queueIndex = queue.findIndex(t => t.id === track.id); }
   state.currentTrack = track;
-  state.isPlaying    = true;
+  state.isPlaying = true;
   updatePlayerUI();
   await sendMsg({ type: 'PLAY', track });
 }
@@ -168,7 +168,7 @@ async function doSearch(q) {
 
     // Save to recent
     const { recent } = await chrome.storage.local.get('recent');
-    const newRecent  = [q, ...(recent || []).filter(x => x !== q)].slice(0, 8);
+    const newRecent = [q, ...(recent || []).filter(x => x !== q)].slice(0, 8);
     await chrome.storage.local.set({ recent: newRecent });
   } catch {
     container.innerHTML = '<div style="text-align:center;padding:20px;color:#ff6e84">Search failed</div>';
@@ -190,9 +190,9 @@ function renderResults(results) {
     row.innerHTML = `
       <div class="result-thumb">
         ${track.thumbnail
-          ? `<img src="${track.thumbnail}" alt="${track.title}">`
-          : '<span class="icon fill" style="color:#adaaaa;font-size:18px">music_note</span>'
-        }
+        ? `<img src="${track.thumbnail}" alt="${track.title}">`
+        : '<span class="icon fill" style="color:#adaaaa;font-size:18px">music_note</span>'
+      }
       </div>
       <div class="result-info">
         <div class="result-title">${track.title}</div>
@@ -218,8 +218,8 @@ async function loadRecentSearches() {
 function updatePlayerUI() {
   const track = state.currentTrack;
 
-  $('track-name').textContent   = track?.title   || 'Not playing';
-  $('track-artist').textContent = track?.artist  || 'Select a track to play';
+  $('track-name').textContent = track?.title || 'Not playing';
+  $('track-artist').textContent = track?.artist || 'Select a track to play';
 
   const artContainer = $('art-container');
   if (track?.thumbnail) {
@@ -241,7 +241,7 @@ function updateLikeButton() {
   const track = state.currentTrack;
   if (!track) return;
   const liked = state.liked.has(track.id);
-  const icon  = $('like-btn').querySelector('.icon');
+  const icon = $('like-btn').querySelector('.icon');
   icon.textContent = liked ? 'favorite' : 'favorite_border';
   icon.style.color = liked ? '#ff94a4' : '';
   $('like-btn').classList.toggle('active', liked);
@@ -264,9 +264,9 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.target !== 'popup') return;
 
   if (msg.type === 'PROGRESS') {
-    const pct   = Math.round(msg.pct || 0);
-    const bar   = $('progress-bar');
-    bar.value   = pct;
+    const pct = Math.round(msg.pct || 0);
+    const bar = $('progress-bar');
+    bar.value = pct;
     bar.style.setProperty('--p', pct + '%');
     $('time-cur').textContent = formatTime(msg.currentTime);
     $('time-tot').textContent = formatTime(msg.duration);

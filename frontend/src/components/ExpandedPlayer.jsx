@@ -109,8 +109,8 @@ export default function ExpandedPlayer({ onClose }) {
             display:'flex', alignItems:'center', justifyContent:'center',
             transition:'all 0.15s', boxShadow:'0 8px 32px rgba(199,153,255,0.25)',
           }}
-          onMouseEnter={e => e.currentTarget.style.background='var(--color-primary-container)'}
-          onMouseLeave={e => e.currentTarget.style.background='var(--color-primary)'}
+          onMouseEnter={e => { e.currentTarget.style.background='var(--color-primary-container)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background='var(--color-primary)'; }}
           >
             {isPlaying
               ? <Pause size={30} fill="var(--color-on-primary)" color="var(--color-on-primary)" />

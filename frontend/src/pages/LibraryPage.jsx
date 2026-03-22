@@ -144,8 +144,8 @@ export default function LibraryPage() {
             onClick={()=>setModal(true)}
             style={{ background:'transparent', borderRadius:12, padding:14, border:'2px dashed rgba(72,72,71,0.25)',
               cursor:'pointer', textAlign:'left', transition:'border-color 0.15s' }}
-            onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(199,153,255,0.35)'}
-            onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(72,72,71,0.25)'}
+            onMouseEnter={e=> { e.currentTarget.style.borderColor='rgba(199,153,255,0.35)'; }}
+            onMouseLeave={e=> { e.currentTarget.style.borderColor='rgba(72,72,71,0.25)'; }}
           >
             <div style={{ width:'100%', aspectRatio:'1', display:'flex', alignItems:'center', justifyContent:'center',
               color:'rgba(173,170,170,0.35)', marginBottom:10 }}>
@@ -190,7 +190,7 @@ export default function LibraryPage() {
                 <button onClick={()=>{ historyApi.clear(); setHistory([]); toast('History cleared'); }}
                   style={{ background:'none', border:'none', cursor:'pointer', color:C.muted,
                     fontSize:12, fontWeight:600, transition:'color 0.15s' }}
-                  onMouseEnter={e=>e.currentTarget.style.color='var(--color-error)'}
+                  onMouseEnter={e=> { e.currentTarget.style.color='var(--color-error)'; }}
                   onMouseLeave={e=>e.currentTarget.style.color=C.muted}>
                   Clear history
                 </button>

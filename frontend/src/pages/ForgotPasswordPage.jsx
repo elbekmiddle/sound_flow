@@ -69,8 +69,8 @@ export default function ForgotPasswordPage() {
 
         <Link to="/login" style={{ marginTop:24, display:'flex', alignItems:'center', gap:8,
           color:'var(--color-on-surface-variant)', fontSize:13, textDecoration:'none', transition:'color 0.15s' }}
-          onMouseEnter={e=>e.currentTarget.style.color='var(--color-on-surface)'}
-          onMouseLeave={e=>e.currentTarget.style.color='var(--color-on-surface-variant)'}>
+          onMouseEnter={e=> { e.currentTarget.style.color='var(--color-on-surface)'; }}
+          onMouseLeave={e=> { e.currentTarget.style.color='var(--color-on-surface-variant)'; }}>
           <ArrowLeft size={16}/> Back to login
         </Link>
       </motion.div>

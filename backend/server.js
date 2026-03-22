@@ -1,17 +1,17 @@
 import 'dotenv/config';
 import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
+import cors    from 'cors';
+import helmet  from 'helmet';
 import compression from 'compression';
-import morgan from 'morgan';
+import morgan  from 'morgan';
 import rateLimit from 'express-rate-limit';
 
-import authRoutes    from './routes/auth.js';
-import musicRoutes   from './routes/music.js';
+import authRoutes     from './routes/auth.js';
+import musicRoutes    from './routes/music.js';
 import playlistRoutes from './routes/playlist.js';
-import historyRoutes from './routes/history.js';
-import libraryRoutes from './routes/library.js';
-import podcastRoutes from './routes/podcast.js';
+import historyRoutes  from './routes/history.js';
+import libraryRoutes  from './routes/library.js';
+import podcastRoutes  from './routes/podcast.js';
 
 import { errorHandler } from './middleware/errorHandler.js';
 import { connectDB }    from './config/database.js';
@@ -20,18 +20,12 @@ import { connectRedis } from './config/redis.js';
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
-// ── Allowed CORS origins ───────────────────────────────────
-// Add all your frontend URLs here (http for local, https for production)
-const ALLOWED_ORIGINS = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://localhost:5173',
-  ...(process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-    : []),
-];
+// ── CRITICAL: Trust reverse proxy (Render, Railway, Heroku, Vercel, etc.) ──
+// Fixes: ERR_ERL_UNEXPECTED_X_FORWARDED_FOR from express-rate-limit
+// Must be set BEFORE any middleware that reads IP addresses
+app.set('trust proxy', 1);
 
-// ── Security ───────────────────────────────────────────────
+// ── Security ────────────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   contentSecurityPolicy: false,
@@ -39,78 +33,90 @@ app.use(helmet({
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// ── CORS — must be before routes ───────────────────────────
+// ── CORS — OPEN TO ALL ORIGINS ──────────────────────────────────────────────
+// Allows: Vercel preview URLs, custom domains, localhost, Chrome extension
+// Setting origin:true reflects whatever Origin header is sent → always allowed
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow no-origin (curl, Postman, extension) + allowed list
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked: ${origin}`);
-      callback(new Error(`CORS: origin ${origin} not allowed`));
-    }
-  },
+  origin: true,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'X-Track-Title'],
+  methods:         ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders:  ['Content-Type','Authorization','X-Requested-With','Accept'],
+  exposedHeaders:  ['Content-Range','Accept-Ranges','X-Track-Title'],
+  maxAge: 86400,   // cache pre-flight 24h
 }));
 
-// ── Pre-flight for all routes ─────────────────────────────
-app.options('*', cors());
+// Handle pre-flight OPTIONS for ALL routes
+app.options('*', cors({ origin: true, credentials: true }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ── Rate Limiting ─────────────────────────────────────────
+// ── Rate Limiting (safe now that trust proxy is set) ─────────────────────────
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
+  windowMs: 15 * 60 * 1000,  // 15 min
+  max: 500,
   standardHeaders: true,
-  legacyHeaders: false,
+  legacyHeaders:   false,
   message: { error: 'Too many requests, please try again later.' },
+  // Skip rate limit errors crashing the app
+  skip: () => false,
+  handler: (req, res) => res.status(429).json({ error: 'Too many requests, please try again later.' }),
 });
+
 const streamLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 40,
+  max: 60,
   message: { error: 'Stream rate limit exceeded.' },
+  handler: (req, res) => res.status(429).json({ error: 'Stream rate limit exceeded.' }),
 });
 
 app.use('/api/', apiLimiter);
 app.use('/api/music/stream', streamLimiter);
 
-// ── Routes ────────────────────────────────────────────────
-app.use('/api/auth',      authRoutes);
-app.use('/api/music',     musicRoutes);
-app.use('/api/playlist',  playlistRoutes);
-app.use('/api/history',   historyRoutes);
-app.use('/api/library',   libraryRoutes);
-app.use('/api/podcast',   podcastRoutes);
+// ── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth',     authRoutes);
+app.use('/api/music',    musicRoutes);
+app.use('/api/playlist', playlistRoutes);
+app.use('/api/history',  historyRoutes);
+app.use('/api/library',  libraryRoutes);
+app.use('/api/podcast',  podcastRoutes);
 
-// ── Health Check ──────────────────────────────────────────
+// ── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
+  res.json({
+    status:    'ok',
+    timestamp: new Date().toISOString(),
+    uptime:    Math.round(process.uptime()),
+    version:   '3.0.0',
+  });
 });
 
-// ── 404 ───────────────────────────────────────────────────
+// ── Root ────────────────────────────────────────────────────────────────────
+app.get('/', (_, res) => {
+  res.json({ name: 'Obsidian Audio API', version: '3.0.0', status: 'running' });
+});
+
+// ── 404 ──────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ error: `${req.method} ${req.path} not found` });
 });
 
-// ── Error Handler ─────────────────────────────────────────
+// ── Global error handler ─────────────────────────────────────────────────────
 app.use(errorHandler);
 
-// ── Bootstrap ─────────────────────────────────────────────
+// ── Bootstrap ────────────────────────────────────────────────────────────────
 async function bootstrap() {
   try {
     await connectDB();
     await connectRedis();
     app.listen(PORT, () => {
       console.log(`🚀 Obsidian Audio API → port ${PORT}`);
-      console.log(`🌐 Allowed CORS origins: ${ALLOWED_ORIGINS.join(', ')}`);
+      console.log(`🌍 CORS: open to all origins`);
+      console.log(`🔒 Trust proxy: enabled`);
+      console.log(`🔧 Node.js: ${process.version}`);
     });
   } catch (err) {
-    console.error('❌ Startup failed:', err);
+    console.error('❌ Startup failed:', err.message);
     process.exit(1);
   }
 }

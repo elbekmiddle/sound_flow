@@ -81,8 +81,8 @@ function ContextMenu({ track, isMusic, onClose }) {
                   cursor:'pointer', textAlign:'left', transition:'background 0.1s',
                   color: added === pl.id ? 'var(--color-secondary)' : 'var(--color-on-surface)',
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-container-highest)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-container-highest)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
               >
                 {added === pl.id
                   ? <Check size={16} color="var(--color-secondary)" />

@@ -98,7 +98,7 @@ export default function PlayerBar() {
                   transition:'transform 0.15s', flexShrink:0,
                 }}
                 onMouseEnter={e => { if(currentTrack) e.currentTarget.style.transform='scale(1.07)'; }}
-                onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}
+                onMouseLeave={e => { e.currentTarget.style.transform='scale(1)'; }}
               >
                 {isPlaying
                   ? <Pause size={20} fill="var(--color-background)" color="var(--color-background)" />

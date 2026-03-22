@@ -161,8 +161,8 @@ export default function ProfilePage() {
           style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none',
             cursor:'pointer', color:'var(--color-error)', fontSize:13, fontWeight:600,
             transition:'opacity 0.15s' }}
-          onMouseEnter={e=>e.currentTarget.style.opacity='0.75'}
-          onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+          onMouseEnter={e=> { e.currentTarget.style.opacity='0.75'; }}
+          onMouseLeave={e=> { e.currentTarget.style.opacity='1'; }}>
           <LogOut size={17}/> Sign Out
         </button>
         <p style={{ fontSize:11, color:'rgba(173,170,170,0.35)' }}>Obsidian Audio v3.0</p>

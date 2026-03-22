@@ -68,8 +68,8 @@ export default function HomePage() {
               borderRadius:10, border:'none', cursor:'pointer',
               overflow:'hidden', transition:'background 0.15s',
             }}
-            onMouseEnter={e => e.currentTarget.style.background='var(--color-surface-bright)'}
-            onMouseLeave={e => e.currentTarget.style.background='var(--color-surface-container-high)'}
+            onMouseEnter={e => { e.currentTarget.style.background='var(--color-surface-bright)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background='var(--color-surface-container-high)'; }}
           >
             <div style={{ width:54, height:54, flexShrink:0, background:grad,
               display:'flex', alignItems:'center', justifyContent:'center' }}>

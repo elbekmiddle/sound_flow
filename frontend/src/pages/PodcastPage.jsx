@@ -69,8 +69,8 @@ export default function PodcastPage() {
               <button style={{ width:38, height:38, borderRadius:'50%', flexShrink:0,
                 background:'var(--color-surface-container-high)', border:'none', cursor:'pointer',
                 display:'flex', alignItems:'center', justifyContent:'center', transition:'background 0.15s' }}
-                onMouseEnter={e=>e.currentTarget.style.background='rgba(199,153,255,0.15)'}
-                onMouseLeave={e=>e.currentTarget.style.background='var(--color-surface-container-high)'}>
+                onMouseEnter={e=> { e.currentTarget.style.background='rgba(199,153,255,0.15)'; }}
+                onMouseLeave={e=> { e.currentTarget.style.background='var(--color-surface-container-high)'; }}>
                 <Play size={16} fill="var(--color-on-surface)" color="var(--color-on-surface)" style={{ marginLeft:2 }} />
               </button>
             </motion.div>

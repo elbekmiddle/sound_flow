@@ -153,8 +153,8 @@ export default function Sidebar() {
             borderRadius:8, textDecoration:'none',
             transition:'background 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = C.surf}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          onMouseEnter={e => { e.currentTarget.style.background = C.surf; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
           <div style={{ width:30, height:30, borderRadius:'50%',
             background:'rgba(199,153,255,0.2)', flexShrink:0,

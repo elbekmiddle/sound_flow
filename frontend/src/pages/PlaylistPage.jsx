@@ -105,7 +105,7 @@ export default function PlaylistPage() {
                 padding:'10px 20px', borderRadius:99, border:'none', cursor:'pointer',
                 fontSize:14, transition:'all 0.15s', opacity:!data.tracks?.length?0.4:1,
               }}
-              onMouseEnter={e=>e.currentTarget.style.background='var(--color-primary-container)'}
+              onMouseEnter={e=> { e.currentTarget.style.background='var(--color-primary-container)'; }}
               onMouseLeave={e=>e.currentTarget.style.background=C.prim}
             >
               <Play size={20} fill="var(--color-on-primary-container)" color="var(--color-on-primary-container)" />
@@ -124,8 +124,8 @@ export default function PlaylistPage() {
                 color:C.text, fontFamily:'var(--font-headline)', fontWeight:600,
                 padding:'10px 18px', borderRadius:99, border:'none', cursor:'pointer',
                 fontSize:14, transition:'background 0.15s' }}
-              onMouseEnter={e=>e.currentTarget.style.background='var(--color-surface-container-high)'}
-              onMouseLeave={e=>e.currentTarget.style.background='var(--color-surface-container)'}
+              onMouseEnter={e=> { e.currentTarget.style.background='var(--color-surface-container-high)'; }}
+              onMouseLeave={e=> { e.currentTarget.style.background='var(--color-surface-container)'; }}
             >
               <Shuffle size={18}/> Shuffle
             </button>

@@ -5,12 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Obsidian Audio — Premium music streaming" />
   <title>Obsidian Audio</title>
-  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>🎵</text></svg>" />
+
+  <!-- Google Fonts: Manrope + Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Material Symbols Outlined (icons) -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    rel="stylesheet"
+  />
+
+  <!-- Prevent FOUC in dark mode -->
+  <style>
+    html, body { background: #0e0e0e; color: #fff; }
+    #root { height: 100%; }
+  </style>
 </head>
-<body class="bg-background text-on-surface antialiased">
+<body>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>

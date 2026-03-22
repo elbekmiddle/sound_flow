@@ -5,157 +5,154 @@ import usePlayerStore from '../store/playerStore.js';
 import { musicApi, historyApi } from '../api/client.js';
 import TrackRow from '../components/TrackRow.jsx';
 
-const GRADIENTS = [
-  'from-violet-600/60 to-purple-950',
-  'from-cyan-600/50 to-teal-950',
-  'from-rose-600/50 to-pink-950',
-  'from-amber-600/50 to-orange-950',
-  'from-emerald-600/50 to-green-950',
-  'from-blue-600/50 to-indigo-950',
+const GRADS = [
+  'linear-gradient(135deg,rgba(139,92,246,.5),rgb(46,16,101))',
+  'linear-gradient(135deg,rgba(6,182,212,.4),rgb(22,78,99))',
+  'linear-gradient(135deg,rgba(244,63,94,.4),rgb(136,19,55))',
+  'linear-gradient(135deg,rgba(245,158,11,.4),rgb(120,53,15))',
+  'linear-gradient(135deg,rgba(16,185,129,.4),rgb(6,78,59))',
+  'linear-gradient(135deg,rgba(99,102,241,.5),rgb(49,46,129))',
 ];
 
-function SkeletonCard() {
-  return <div className="w-44 h-56 flex-shrink-0 skeleton" />;
+function Skeleton({ w, h, style }) {
+  return <div className="skeleton" style={{ width: w, height: h, ...style }} />;
 }
 
-function SkeletonRow() {
-  return (
-    <div className="flex items-center gap-3 px-3 py-2.5">
-      <div className="w-8 h-4 skeleton flex-shrink-0" />
-      <div className="w-10 h-10 skeleton flex-shrink-0" />
-      <div className="flex-1 space-y-1.5">
-        <div className="h-3 skeleton w-3/4" />
-        <div className="h-2.5 skeleton w-1/2" />
-      </div>
-      <div className="w-10 h-3 skeleton" />
-    </div>
-  );
-}
-
-const STAGGER = {
-  container: { hidden: {}, show: { transition: { staggerChildren: 0.07 } } },
-  item:      { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0,
-               transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } } },
+const item = {
+  hidden: { opacity: 0, y: 14 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.38, ease: [0.16, 1, 0.3, 1] } },
+};
+const container = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.06 } },
 };
 
 export default function HomePage() {
   const { profile } = useAuthStore();
-  const { play } = usePlayerStore();
-  const [trending, setTrending]     = useState(null);
-  const [history, setHistory]       = useState(null);
+  const { play }    = usePlayerStore();
+  const [trending, setTrending] = useState(null);
+  const [history,  setHistory]  = useState(null);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const h = new Date().getHours();
+  const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const name = profile?.display_name || 'there';
 
   useEffect(() => {
-    musicApi.trending()
-      .then(tracks => setTrending(tracks))
-      .catch(() => setTrending([]));
-
-    historyApi.get()
-      .then(tracks => setHistory(tracks.slice(0, 6)))
-      .catch(() => setHistory([]));
+    musicApi.trending().then(setTrending).catch(() => setTrending([]));
+    historyApi.get().then((t) => setHistory(t.slice(0, 6))).catch(() => setHistory([]));
   }, []);
 
   const quickPicks = [
-    { label: 'Liked Songs',      icon: 'favorite',      color: '#ff94a4', gradient: 'from-tertiary/30 to-rose-950' },
-    { label: 'Your Mix',         icon: 'auto_awesome',  color: '#c799ff', gradient: 'from-primary/30 to-purple-950' },
-    { label: 'Recently Played',  icon: 'history',       color: '#4af8e3', gradient: 'from-secondary/30 to-teal-950' },
+    { label: 'Liked Songs',     icon: 'favorite',     grad: 'linear-gradient(135deg,rgba(255,148,164,.3),rgb(136,19,55))',  iconColor: 'var(--color-tertiary)' },
+    { label: 'Your Mix',        icon: 'auto_awesome', grad: 'linear-gradient(135deg,rgba(199,153,255,.3),rgb(68,0,128))',   iconColor: 'var(--color-primary)'  },
+    { label: 'Recently Played', icon: 'history',      grad: 'linear-gradient(135deg,rgba(74,248,227,.25),rgb(0,91,81))',   iconColor: 'var(--color-secondary)'},
   ];
 
-  return (
-    <div className="p-6 md:p-8 max-w-screen-xl mx-auto">
+  const C = {
+    text:    'var(--color-on-surface)',
+    muted:   'var(--color-on-surface-variant)',
+    surface: 'var(--color-surface-container)',
+    surfHi:  'var(--color-surface-container-high)',
+    surfBr:  'var(--color-surface-bright)',
+    primary: 'var(--color-primary)',
+  };
 
-      {/* ── Header ──────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45 }}
-        className="flex items-center justify-between mb-8"
-      >
+  return (
+    <div style={{ padding: '24px 32px', maxWidth: 1280, margin: '0 auto' }}>
+
+      {/* ── Header ───────────────────────────────────── */}
+      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+        style={{ marginBottom: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <p className="text-on-surface-variant text-sm font-medium">{greeting}</p>
-          <h1 className="font-headline font-black text-3xl tracking-tight mt-0.5">{name}</h1>
+          <p style={{ color: C.muted, fontSize: 13, fontWeight: 500 }}>{greeting}</p>
+          <h1 style={{ fontFamily: 'var(--font-headline)', fontWeight: 900, fontSize: 28,
+            letterSpacing: '-0.03em', marginTop: 2 }}>
+            {name}
+          </h1>
         </div>
       </motion.div>
 
-      {/* ── Quick picks ─────────────────────────────── */}
-      <motion.div
-        variants={STAGGER.container}
-        initial="hidden" animate="show"
-        className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10"
-      >
-        {quickPicks.map((item, i) => (
-          <motion.button
-            key={i}
-            variants={STAGGER.item}
-            onClick={() => {
-              if (trending?.length) play(trending[i % trending.length], trending);
+      {/* ── Quick picks ──────────────────────────────── */}
+      <motion.div variants={container} initial="hidden" animate="show"
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 40 }}>
+        {quickPicks.map((item2, i) => (
+          <motion.button key={i} variants={item}
+            onClick={() => trending?.length && play(trending[i % trending.length], trending)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              background: C.surfHi, borderRadius: 10,
+              border: 'none', cursor: 'pointer',
+              overflow: 'hidden', transition: 'background 0.15s',
             }}
-            className="flex items-center gap-3 bg-surface-container-high hover:bg-surface-bright
-                       rounded-md transition-colors group text-left overflow-hidden"
+            onMouseEnter={(e) => { e.currentTarget.style.background = C.surfBr; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = C.surfHi; }}
           >
-            <div className={`w-14 h-14 flex-shrink-0 bg-gradient-to-br ${item.gradient}
-                             flex items-center justify-center`}>
-              <span className="material-symbols-outlined"
-                style={{ color: item.color, fontVariationSettings: "'FILL' 1" }}>
-                {item.icon}
-              </span>
+            <div style={{
+              width: 56, height: 56, flexShrink: 0,
+              background: item2.grad,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span className="material-symbols-outlined ms-fill"
+                style={{ color: item2.iconColor, fontSize: 24 }}>{item2.icon}</span>
             </div>
-            <span className="font-semibold text-sm truncate pr-2">{item.label}</span>
-            <span className="material-symbols-outlined text-primary ml-auto mr-3 text-[20px]
-                             opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ fontVariationSettings: "'FILL' 1" }}>
-              play_circle
-            </span>
+            <span style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{item2.label}</span>
           </motion.button>
         ))}
       </motion.div>
 
-      {/* ── Trending ────────────────────────────────── */}
-      <section className="mb-10">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="flex items-center justify-between mb-5"
-        >
-          <h2 className="font-headline font-bold text-xl tracking-tight">Trending Now</h2>
-          <button className="text-xs text-on-surface-variant hover:text-primary transition-colors
-                             font-semibold uppercase tracking-wide">See all</button>
+      {/* ── Trending ─────────────────────────────────── */}
+      <section style={{ marginBottom: 40 }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h2 style={{ fontFamily: 'var(--font-headline)', fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em' }}>
+            Trending Now
+          </h2>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer',
+            color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            See all
+          </button>
         </motion.div>
 
-        <div className="flex gap-4 overflow-x-auto pb-3 no-scrollbar">
+        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 12 }} className="no-scrollbar">
           {trending === null
-            ? Array(6).fill(0).map((_, i) => <SkeletonCard key={i} />)
+            ? Array(6).fill(0).map((_, i) => <Skeleton key={i} w={176} h={224} style={{ flexShrink: 0 }} />)
             : trending.slice(0, 8).map((track, i) => (
-                <motion.button
-                  key={track.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 + i * 0.05 }}
+                <motion.button key={track.id}
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 + i * 0.04 }}
                   onClick={() => play(track, trending)}
-                  className="w-44 flex-shrink-0 card text-left"
+                  style={{
+                    width: 176, flexShrink: 0,
+                    background: 'var(--color-surface-container)',
+                    borderRadius: 12, overflow: 'hidden',
+                    border: 'none', cursor: 'pointer', textAlign: 'left',
+                    transition: 'transform 0.2s, background 0.2s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.background = 'var(--color-surface-container-high)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)';    e.currentTarget.style.background = 'var(--color-surface-container)'; }}
                 >
-                  <div className={`h-44 bg-gradient-to-br ${GRADIENTS[i % GRADIENTS.length]}
-                                   flex items-center justify-center relative group overflow-hidden`}>
-                    {track.thumbnail ? (
+                  <div style={{ height: 176, background: GRADS[i % GRADS.length], position: 'relative', overflow: 'hidden' }}>
+                    {track.thumbnail && (
                       <img src={track.thumbnail} alt={track.title}
-                        className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="material-symbols-outlined text-white/30 text-6xl"
-                        style={{ fontVariationSettings: "'FILL' 1" }}>album</span>
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     )}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100
-                                    transition-opacity flex items-center justify-center">
-                      <span className="material-symbols-outlined text-white text-5xl"
-                        style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      background: 'rgba(0,0,0,0.4)',
+                      opacity: 0, transition: 'opacity 0.15s',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
+                    >
+                      <span className="material-symbols-outlined ms-fill" style={{ color: '#fff', fontSize: 52 }}>play_circle</span>
                     </div>
                   </div>
-                  <div className="p-3">
-                    <p className="font-semibold text-sm truncate">{track.title}</p>
-                    <p className="text-xs text-on-surface-variant mt-0.5 truncate">{track.artist}</p>
+                  <div style={{ padding: '12px 12px 14px' }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: C.text,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.title}</p>
+                    <p style={{ fontSize: 11, color: C.muted, marginTop: 2,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.artist}</p>
                   </div>
                 </motion.button>
               ))
@@ -163,74 +160,73 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Recently Played ─────────────────────────── */}
-      <section className="mb-10">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="flex items-center justify-between mb-5"
-        >
-          <div>
-            <h2 className="font-headline font-bold text-xl tracking-tight">Recently Played</h2>
-            <p className="text-on-surface-variant text-xs mt-0.5">Pick up where you left off</p>
-          </div>
+      {/* ── Recently Played ──────────────────────────── */}
+      <section style={{ marginBottom: 40 }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}
+          style={{ marginBottom: 16 }}>
+          <h2 style={{ fontFamily: 'var(--font-headline)', fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em' }}>
+            Recently Played
+          </h2>
+          <p style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>Pick up where you left off</p>
         </motion.div>
 
-        <div className="space-y-1">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {history === null
-            ? Array(5).fill(0).map((_, i) => <SkeletonRow key={i} />)
+            ? Array(5).fill(0).map((_, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
+                <Skeleton w={32} h={14} /> <Skeleton w={40} h={40} />
+                <div style={{ flex: 1 }}><Skeleton w="60%" h={12} style={{ marginBottom: 6 }} /><Skeleton w="35%" h={10} /></div>
+              </div>)
             : history.length === 0
-              ? (
-                  <p className="text-on-surface-variant text-sm py-6 text-center">
-                    No history yet. Start listening!
-                  </p>
-                )
-              : history.map((track, i) => (
-                  <TrackRow key={track.id} track={track} index={i} queue={history} />
-                ))
+              ? <p style={{ color: C.muted, fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+                  No history yet. Start listening!
+                </p>
+              : history.map((t, i) => <TrackRow key={t.id} track={t} index={i} queue={history} />)
           }
         </div>
       </section>
 
-      {/* ── Recommended ─────────────────────────────── */}
-      {trending && trending.length > 0 && (
-        <section className="mb-10">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="flex items-center justify-between mb-5"
-          >
-            <h2 className="font-headline font-bold text-xl tracking-tight">Recommended</h2>
-            <button className="text-xs text-on-surface-variant hover:text-primary transition-colors
-                               font-semibold uppercase tracking-wide">Refresh</button>
+      {/* ── Recommended ──────────────────────────────── */}
+      {trending && trending.length > 8 && (
+        <section style={{ marginBottom: 40 }}>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <h2 style={{ fontFamily: 'var(--font-headline)', fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em' }}>
+              Recommended
+            </h2>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer',
+              color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              Refresh
+            </button>
           </motion.div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 16 }}>
             {trending.slice(8, 16).map((track, i) => (
-              <motion.button
-                key={track.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 + i * 0.04 }}
+              <motion.button key={track.id}
+                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.28 + i * 0.04 }}
                 onClick={() => play(track, trending.slice(8))}
-                className="card p-3 text-left w-full"
+                style={{
+                  background: 'var(--color-surface-container)', borderRadius: 12,
+                  padding: 12, border: 'none', cursor: 'pointer', textAlign: 'left',
+                  transition: 'transform 0.2s, background 0.2s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.background = 'var(--color-surface-container-high)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)';    e.currentTarget.style.background = 'var(--color-surface-container)'; }}
               >
-                <div className="w-full aspect-square rounded-md overflow-hidden mb-3 bg-surface-container-high">
-                  {track.thumbnail ? (
+                <div style={{ width: '100%', aspectRatio: '1', borderRadius: 8, overflow: 'hidden',
+                  background: GRADS[i % GRADS.length], marginBottom: 12 }}>
+                  {track.thumbnail && (
                     <img src={track.thumbnail} alt={track.title}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
-                  ) : (
-                    <div className={`w-full h-full bg-gradient-to-br ${GRADIENTS[i % GRADIENTS.length]}
-                                     flex items-center justify-center`}>
-                      <span className="material-symbols-outlined text-white/30 text-4xl"
-                        style={{ fontVariationSettings: "'FILL' 1" }}>album</span>
-                    </div>
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s' }}
+                      onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                      onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                    />
                   )}
                 </div>
-                <p className="font-semibold text-sm truncate">{track.title}</p>
-                <p className="text-xs text-on-surface-variant mt-0.5 truncate">{track.artist}</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.text,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.title}</p>
+                <p style={{ fontSize: 11, color: C.muted, marginTop: 2,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.artist}</p>
               </motion.button>
             ))}
           </div>

@@ -167,6 +167,7 @@ export async function stream(req, res) {
     } else {
       const { stdout: metaOut } = await execFileAsync(YTDLP_BIN, [
         '--quiet', '--no-warnings', '--no-playlist',
+        '--extractor-args', 'youtube:player_client=android',
         '--print', '%(title)s\n%(uploader)s\n%(duration)s',
         ytUrl,
       ], { timeout: 12000 });
@@ -190,6 +191,7 @@ export async function stream(req, res) {
     '--quiet',
     '--no-warnings',
     '--no-playlist',
+    '--extractor-args', 'youtube:player_client=android',
     '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*',
     '-o', '-',
     ytUrl,
@@ -238,6 +240,7 @@ export async function getInfo(req, res) {
   try {
     const { stdout } = await execFileAsync(YTDLP_BIN, [
       '--no-playlist', '--no-warnings',
+      '--extractor-args', 'youtube:player_client=android',
       '-j', `https://www.youtube.com/watch?v=${id}`,
     ], { timeout: 15000 });
     const d = JSON.parse(stdout.trim());

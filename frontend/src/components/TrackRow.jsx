@@ -185,7 +185,7 @@ export default function TrackRow({ track, index, queue, showIndex=true, isMusic=
         <AnimatePresence>
           {menuOpen && (
             <>
-              <div style={{position:'fixed',inset:0,zIndex:199}} onClick={e=>{e.stopPropagation();setMenuOpen(false);}}/>
+              <div style={{position:'fixed',inset:0,zIndex:199, cursor:'default'}} onClick={e=>{e.stopPropagation();setMenuOpen(false);}}/>
               <ContextMenu track={track} isMusic={isMusic} onClose={()=>setMenuOpen(false)}/>
             </>
           )}

@@ -1,14 +1,10 @@
-/**
- * SocketContext.jsx — real-time WebSocket context via socket.io singleton
- * Provides: connected status, online user count, friend activity
- */
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { socket, connectSocket, disconnectSocket } from '../api/socket.js';
 import { getToken } from '../api/client.js';
 
 const SocketContext = createContext(null);
 
-export function SocketProvider({ children }) {
+export const SocketProvider = ({ children }) => {
   const [connected, setConnected]           = useState(false);
   const [onlineCount, setOnlineCount]       = useState(0);
   const [friendActivity, setFriendActivity] = useState([]);
@@ -69,8 +65,10 @@ export function SocketProvider({ children }) {
       {children}
     </SocketContext.Provider>
   );
-}
+};
 
-export function useSocket() {
-  return useContext(SocketContext);
-}
+export const useSocket = () => {
+  const ctx = useContext(SocketContext);
+  if (!ctx) throw new Error("useSocket must be used inside SocketProvider");
+  return ctx;
+};

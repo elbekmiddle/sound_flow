@@ -13,6 +13,7 @@ export const socket = io(WS_URL, {
   autoConnect: false,          // we connect manually after auth
   reconnectionAttempts: 10,
   reconnectionDelay: 2000,
+  withCredentials: true,
 });
 
 /** Call once user is logged in */

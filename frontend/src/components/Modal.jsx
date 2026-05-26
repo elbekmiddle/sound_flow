@@ -51,6 +51,7 @@ export default function Modal({ open, onClose, children, maxWidth = 380, title }
             backdropFilter: 'blur(6px)',
             WebkitBackdropFilter: 'blur(6px)',
             padding: '0 16px',
+            cursor: 'default',
           }}
         >
           <motion.div

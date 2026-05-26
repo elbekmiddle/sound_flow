@@ -6,10 +6,54 @@ import { cacheGet, cacheSet, cacheDel } from '../config/redis.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.js';
 
 const JWT_SECRET  = process.env.JWT_SECRET || 'change-me-in-production';
-const JWT_EXPIRES = '30d';
+const REFRESH_SECRET = process.env.REFRESH_SECRET || 'change-me-refresh';
+const ACCESS_EXPIRES = '15m'; // Short-lived access token
+const REFRESH_EXPIRES = '30d'; // Long-lived refresh token
 
-function makeToken(userId, email) {
-  return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+function makeAccessToken(userId, email) {
+  return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
+}
+
+function makeRefreshToken(sessionId) {
+  return jwt.sign({ sessionId }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES });
+}
+
+async function createSession(res, req, userId, email) {
+  // Device limits: max 5 sessions per user
+  const activeSessions = await query(
+    'SELECT id FROM sessions WHERE user_id = $1 AND is_revoked = FALSE ORDER BY created_at ASC',
+    [userId]
+  );
+
+  if (activeSessions.rowCount >= 5) {
+    // Revoke oldest session
+    const oldestId = activeSessions.rows[0].id;
+    await query('UPDATE sessions SET is_revoked = TRUE WHERE id = $1', [oldestId]);
+  }
+
+  const sessionId = crypto.randomUUID();
+  const refreshToken = makeRefreshToken(sessionId);
+  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000); // 30 days
+  
+  const userAgent = req.useragent ? req.useragent.source : req.headers['user-agent'] || 'Unknown';
+  const ip = req.ip || req.connection.remoteAddress || 'Unknown';
+  const deviceId = req.useragent ? `${req.useragent.browser} on ${req.useragent.os}` : 'Unknown Device';
+
+  await query(
+    `INSERT INTO sessions (id, user_id, refresh_token_hash, device_id, user_agent, ip, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [sessionId, userId, refreshTokenHash, deviceId, userAgent, ip, expiresAt]
+  );
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 30 * 24 * 3600 * 1000 // 30 days
+  });
+
+  return makeAccessToken(userId, email);
 }
 
 // ── Register ──────────────────────────────────────────────────────────────────
@@ -43,7 +87,7 @@ export async function register(req, res) {
   );
 
   const user  = result.rows[0];
-  const token = makeToken(user.id, user.email);
+  const token = await createSession(res, req, user.id, user.email);
 
   // Send verification email (non-blocking)
   sendVerificationEmail(email, verifyToken)
@@ -81,10 +125,67 @@ export async function login(req, res) {
   await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
 
   delete user.password_hash;
-  const token = makeToken(user.id, user.email);
+  const token = await createSession(res, req, user.id, user.email);
   await cacheSet(`user:jwt:${user.id}`, user, 3600);
 
   res.json({ user, token });
+}
+
+// ── Refresh Token ─────────────────────────────────────────────────────────────
+export async function refresh(req, res) {
+  const { refreshToken } = req.cookies;
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token missing' });
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, REFRESH_SECRET);
+    const { sessionId } = decoded;
+
+    const result = await query(
+      `SELECT s.id, s.user_id, s.refresh_token_hash, s.is_revoked, s.expires_at, u.email, u.is_active
+       FROM sessions s
+       JOIN users u ON s.user_id = u.id
+       WHERE s.id = $1`,
+      [sessionId]
+    );
+
+    const session = result.rows[0];
+    if (!session || session.is_revoked || !session.is_active || new Date(session.expires_at) < new Date()) {
+      res.clearCookie('refreshToken');
+      return res.status(401).json({ error: 'Session invalid or expired' });
+    }
+
+    const valid = await bcrypt.compare(refreshToken, session.refresh_token_hash);
+    if (!valid) {
+      res.clearCookie('refreshToken');
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    // Update last active
+    await query('UPDATE sessions SET last_active = NOW() WHERE id = $1', [sessionId]);
+
+    const newToken = makeAccessToken(session.user_id, session.email);
+    res.json({ token: newToken });
+  } catch (error) {
+    res.clearCookie('refreshToken');
+    return res.status(401).json({ error: 'Invalid or expired refresh token' });
+  }
+}
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+export async function logout(req, res) {
+  const { refreshToken } = req.cookies;
+  if (refreshToken) {
+    try {
+      const decoded = jwt.verify(refreshToken, REFRESH_SECRET);
+      await query('UPDATE sessions SET is_revoked = TRUE WHERE id = $1', [decoded.sessionId]);
+    } catch (e) {
+      // ignore invalid token on logout
+    }
+    res.clearCookie('refreshToken');
+  }
+  res.json({ message: 'Logged out successfully' });
 }
 
 // ── Get current user ──────────────────────────────────────────────────────────

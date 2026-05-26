@@ -56,7 +56,8 @@ const useAuthStore = create(
         return profile;
       },
 
-      logout: () => {
+      logout: async () => {
+        try { await authApi.logout(); } catch (e) {}
         clearToken();
         disconnectSocket();
         set({ user: null, profile: null, token: null });

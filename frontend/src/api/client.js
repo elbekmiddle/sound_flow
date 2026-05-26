@@ -13,7 +13,12 @@ export const setToken   = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 export { API_BASE };
 
-const api = axios.create({ baseURL: API_BASE, timeout: 20000, headers: { 'Content-Type': 'application/json' } });
+const api = axios.create({ 
+  baseURL: API_BASE, 
+  timeout: 20000, 
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true // Important for httpOnly cookies
+});
 
 api.interceptors.request.use((config) => {
   const t = getToken();
@@ -23,8 +28,21 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (r) => r.data,
-  (err) => {
-    if (err.response?.status === 401) clearToken(); // Only clear token, no redirect
+  async (err) => {
+    const originalRequest = err.config;
+    // If 401 and we haven't already retried
+    if (err.response?.status === 401 && !originalRequest._retry && originalRequest.url !== '/api/auth/login') {
+      originalRequest._retry = true;
+      try {
+        const { token } = await axios.post(`${API_BASE}/api/auth/refresh`, {}, { withCredentials: true });
+        setToken(token);
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return api(originalRequest); // retry the original request
+      } catch (refreshErr) {
+        clearToken();
+        // Maybe dispatch a custom event to force UI to login page if needed
+      }
+    }
     return Promise.reject(new Error(err.response?.data?.error || err.message || 'Request failed'));
   }
 );
@@ -33,6 +51,7 @@ api.interceptors.response.use(
 export const authApi = {
   register:       (d) => api.post('/api/auth/register', d),
   login:          (d) => api.post('/api/auth/login', d),
+  logout:         ()  => api.post('/api/auth/logout'),
   me:             ()  => api.get('/api/auth/me'),
   update:         (d) => api.put('/api/auth/profile', d),
   forgotPassword: (e) => api.post('/api/auth/forgot-password', { email: e }),

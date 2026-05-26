@@ -7,6 +7,8 @@ import helmet      from 'helmet';
 import compression from 'compression';
 import morgan      from 'morgan';
 import rateLimit   from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
+import useragent    from 'express-useragent';
 
 import authRoutes     from './routes/auth.js';
 import musicRoutes    from './routes/music.js';
@@ -25,7 +27,7 @@ const PORT   = process.env.PORT || 5000;
 
 // ── Socket.IO ──────────────────────────────────────────────────────────────
 export const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: { origin: true, credentials: true, methods: ['GET', 'POST'] },
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
@@ -82,6 +84,8 @@ app.use(cors({ origin: true, credentials: true,
 app.options('*', cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(useragent.express());
 
 const limiter = rateLimit({ windowMs: 15*60*1000, max: 500, standardHeaders: true, legacyHeaders: false,
   handler: (_,res) => res.status(429).json({ error: 'Too many requests' }) });
@@ -112,6 +116,19 @@ const AUTO_MIGRATE = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires    TIMESTAMPTZ;
   CREATE INDEX IF NOT EXISTS idx_users_reset_token  ON users(reset_token)  WHERE reset_token  IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_users_verify_token ON users(email_verify_token) WHERE email_verify_token IS NOT NULL;
+  
+  CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    refresh_token_hash TEXT NOT NULL,
+    device_id TEXT,
+    user_agent TEXT,
+    ip TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    last_active TIMESTAMPTZ DEFAULT NOW(),
+    is_revoked BOOLEAN DEFAULT FALSE
+  );
 `;
 
 async function bootstrap() {

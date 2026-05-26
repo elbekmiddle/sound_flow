@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Heart, ListMusic, History } from 'lucide-react';
+import { Plus, Heart, ListMusic, History, X } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import toast from 'react-hot-toast';
 import useT from '../i18n/useT.js';
@@ -23,7 +23,7 @@ function CreateModal({ onClose, onCreate }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center',
-      justifyContent:'center', background:'rgba(0,0,0,0.65)', backdropFilter:'blur(8px)' }}
+      justifyContent:'center', background:'rgba(0,0,0,0.65)', backdropFilter:'blur(8px)', cursor: 'default' }}
       onClick={onClose}>
       <motion.div initial={{ opacity:0, scale:0.93 }} animate={{ opacity:1, scale:1 }}
         onClick={e=>e.stopPropagation()}

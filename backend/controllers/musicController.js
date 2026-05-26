@@ -166,8 +166,8 @@ export async function stream(req, res) {
       ({ title, uploader, duration } = cached);
     } else {
       const { stdout: metaOut } = await execFileAsync(YTDLP_BIN, [
-        '--quiet', '--no-warnings', '--no-playlist',
-        '--extractor-args', 'youtube:player_client=android',
+        '--quiet', '--no-warnings', '--no-playlist', '--rm-cache-dir',
+        '--extractor-args', 'youtube:player_client=android,ios',
         '--print', '%(title)s\n%(uploader)s\n%(duration)s',
         ytUrl,
       ], { timeout: 12000 });
@@ -191,7 +191,8 @@ export async function stream(req, res) {
     '--quiet',
     '--no-warnings',
     '--no-playlist',
-    '--extractor-args', 'youtube:player_client=android',
+    '--rm-cache-dir',
+    '--extractor-args', 'youtube:player_client=android,ios',
     '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*',
     '-o', '-',
     ytUrl,
@@ -239,8 +240,8 @@ export async function getInfo(req, res) {
   if (cached) return res.json(cached);
   try {
     const { stdout } = await execFileAsync(YTDLP_BIN, [
-      '--no-playlist', '--no-warnings',
-      '--extractor-args', 'youtube:player_client=android',
+      '--no-playlist', '--no-warnings', '--rm-cache-dir',
+      '--extractor-args', 'youtube:player_client=android,ios',
       '-j', `https://www.youtube.com/watch?v=${id}`,
     ], { timeout: 15000 });
     const d = JSON.parse(stdout.trim());

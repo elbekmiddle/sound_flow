@@ -27,7 +27,8 @@ if (process.env.YOUTUBE_COOKIES) {
 // Build base yt-dlp args (with cookies if available)
 const ytdlpBaseArgs = () => [
   ...(COOKIE_FILE ? ['--cookies', COOKIE_FILE] : []),
-  '--extractor-args', 'youtube:player_client=android,ios',
+  '--extractor-args', 'youtube:player_client=tv_embedded,android_vr,web_creator',
+  '--no-check-certificates',
 ];
 
 let _ytSearch;

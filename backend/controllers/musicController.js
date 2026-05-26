@@ -1,36 +1,35 @@
 /**
  * musicController.js — Sound Flow
- * Streaming via yt-dlp (more reliable than ytdl-core against YouTube bot detection)
+ * Streaming via youtubei.js (InnerTube API — no bot detection issues)
+ * Search via yt-search (scrapes YouTube search results)
  */
 import { spawn, execFile } from 'child_process';
 import { promisify }       from 'util';
 import { cacheGet, cacheSet } from '../config/redis.js';
 import { query }              from '../config/database.js';
-
+import { Innertube }          from 'youtubei.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
 const execFileAsync = promisify(execFile);
 
-// Check if local yt-dlp exists (for Render), otherwise use global
-const YTDLP_BIN = fs.existsSync(path.resolve('./yt-dlp')) ? path.resolve('./yt-dlp') : 'yt-dlp';
-
-// Write YouTube cookies from env var to a temp file (once at startup)
-let COOKIE_FILE = null;
-if (process.env.YOUTUBE_COOKIES) {
-  COOKIE_FILE = path.join(os.tmpdir(), 'yt_cookies.txt');
-  fs.writeFileSync(COOKIE_FILE, process.env.YOUTUBE_COOKIES, 'utf-8');
-  console.log('🍪 YouTube cookies loaded from env');
+// ── youtubei.js singleton ─────────────────────────────────────────────────
+let _innertube = null;
+async function getInnertube() {
+  if (!_innertube) {
+    _innertube = await Innertube.create({
+      cache: undefined,
+      generate_session_locally: true,
+    });
+    console.log('🎬 youtubei.js InnerTube initialized');
+  }
+  return _innertube;
 }
+// Initialize eagerly at startup
+getInnertube().catch(err => console.error('InnerTube init error:', err.message));
 
-// Build base yt-dlp args (with cookies if available)
-const ytdlpBaseArgs = () => [
-  ...(COOKIE_FILE ? ['--cookies', COOKIE_FILE] : []),
-  '--extractor-args', 'youtube:player_client=tv_embedded,android_vr,web_creator',
-  '--no-check-certificates',
-];
-
+// ── yt-search (for search results) ───────────────────────────────────────
 let _ytSearch;
 async function ytSearch(opts) {
   if (!_ytSearch) {
@@ -55,30 +54,6 @@ const mapVideo = v => ({
   thumbnail: v.thumbnail, views: v.views,
   type: trackType(v),
 });
-
-// ── Get best audio URL via yt-dlp ────────────────────────────────────────
-async function getAudioUrl(videoId) {
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-  try {
-    const { stdout } = await execFileAsync(YTDLP_BIN, [
-      ...ytdlpBaseArgs(),
-      '--no-playlist', '--no-warnings',
-      '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio',
-      '--get-url', '--get-filename',
-      '-o', '%(title)s|||%(uploader)s|||%(duration)s|||%(thumbnail)s',
-      url,
-    ], { timeout: 20000 });
-
-    const lines = stdout.trim().split('\n').filter(Boolean);
-    // Last line is the URL, second to last may be filename
-    const audioUrl = lines[lines.length - 1];
-    const meta     = lines.length >= 2 ? lines[lines.length - 2] : '';
-    const [title, uploader, duration, thumbnail] = meta.split('|||');
-    return { audioUrl, title, uploader, duration, thumbnail };
-  } catch (err) {
-    throw new Error(`yt-dlp failed: ${err.message}`);
-  }
-}
 
 // ── Search ───────────────────────────────────────────────────────────────
 export async function search(req, res) {
@@ -164,115 +139,97 @@ export async function getRecommendations(req, res) {
   } catch { res.json([]); }
 }
 
-// ── Stream ────────────────────────────────────────────────────────────────
+// ── Stream via youtubei.js ────────────────────────────────────────────────
 export async function stream(req, res) {
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'Video ID required' });
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) return res.status(400).json({ error: 'Invalid ID' });
 
-  const ytUrl = `https://www.youtube.com/watch?v=${id}`;
-
-  // Fetch metadata for headers (cached)
-  const metaKey = `meta:v3:${id}`;
-  let title = '', uploader = '', duration = '';
-  try {
-    const cached = await cacheGet(metaKey);
-    if (cached) {
-      ({ title, uploader, duration } = cached);
-    } else {
-      const { stdout: metaOut } = await execFileAsync(YTDLP_BIN, [
-        ...ytdlpBaseArgs(),
-        '--quiet', '--no-warnings', '--no-playlist',
-        '--print', '%(title)s\n%(uploader)s\n%(duration)s',
-        ytUrl,
-      ], { timeout: 12000 });
-      const [t, u, d] = metaOut.trim().split('\n');
-      title = t || ''; uploader = u || ''; duration = d || '';
-      await cacheSet(metaKey, { title, uploader, duration }, 3600 * 6);
-    }
-  } catch { /* metadata is optional, continue streaming */ }
-
-  // Set response headers
-  const origin = req.headers.origin || '*';
-  res.setHeader('Content-Type', 'audio/webm');
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Vary', 'Origin');
-  if (title)    res.setHeader('X-Track-Title',    encodeURIComponent(title));
-  if (uploader) res.setHeader('X-Track-Artist',   encodeURIComponent(uploader));
-  if (duration) res.setHeader('X-Track-Duration', duration);
-
-  // Spawn yt-dlp and pipe audio directly to response
-  const ytdlpArgs = [
-    ...ytdlpBaseArgs(),
-    '--quiet', '--no-warnings', '--no-playlist',
-    '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*',
-    '-o', '-',
-    ytUrl,
-  ];
-
   console.log(`🎵 Streaming: ${id}`);
-  const ytdlp = spawn(YTDLP_BIN, ytdlpArgs);
 
-  let headersSent = false;
-  ytdlp.stdout.once('data', () => {
-    if (!headersSent) { headersSent = true; }
-  });
+  try {
+    const yt   = await getInnertube();
+    const info = await yt.getInfo(id);
 
-  ytdlp.stdout.pipe(res);
+    const title    = info.basic_info?.title    || '';
+    const uploader = info.basic_info?.author   || '';
+    const duration = info.basic_info?.duration || '';
 
-  ytdlp.stderr.on('data', (chunk) => {
-    const msg = chunk.toString().trim();
-    if (msg && !msg.startsWith('[download]')) {
-      console.error(`yt-dlp [${id}]:`, msg);
+    // Set response headers
+    const origin = req.headers.origin || '*';
+    res.setHeader('Content-Type', 'audio/webm');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+    if (title)    res.setHeader('X-Track-Title',    encodeURIComponent(title));
+    if (uploader) res.setHeader('X-Track-Artist',   encodeURIComponent(uploader));
+    if (duration) res.setHeader('X-Track-Duration', String(duration));
+
+    // Stream audio directly
+    const audioStream = await yt.download(id, {
+      type:    'audio',
+      quality: 'best',
+      format:  'webm',
+    });
+
+    // Pipe ReadableStream to Express response
+    const { Readable } = await import('stream');
+    const nodeStream = Readable.fromWeb
+      ? Readable.fromWeb(audioStream)
+      : Readable.from(audioStream);
+
+    nodeStream.pipe(res);
+
+    req.on('close', () => {
+      try { nodeStream.destroy(); } catch {}
+    });
+
+    nodeStream.on('error', (err) => {
+      console.error(`Stream error [${id}]:`, err.message);
+      if (!res.headersSent) res.status(500).end();
+    });
+
+  } catch (err) {
+    console.error(`youtubei.js stream error [${id}]:`, err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to stream audio. Try again.' });
     }
-  });
-
-  ytdlp.on('close', (code) => {
-    if (code !== 0 && code !== null && !res.writableEnded) {
-      console.error(`yt-dlp exited with code ${code} for ${id}`);
-      if (!res.headersSent) res.status(451).json({ error: 'Video cannot be streamed' });
-    }
-  });
-
-  ytdlp.on('error', (err) => {
-    console.error('yt-dlp spawn error:', err.message);
-    if (!res.headersSent) res.status(500).end();
-  });
-
-  req.on('close', () => {
-    try { ytdlp.kill('SIGTERM'); } catch {}
-  });
+  }
 }
 
-// ── Info ─────────────────────────────────────────────────────────────────
+// ── Info via youtubei.js ──────────────────────────────────────────────────
 export async function getInfo(req, res) {
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'Video ID required' });
+
   const cached = await cacheGet(`info:v6:${id}`);
   if (cached) return res.json(cached);
+
   try {
-    const { stdout } = await execFileAsync(YTDLP_BIN, [
-      ...ytdlpBaseArgs(),
-      '--no-playlist', '--no-warnings',
-      '-j', `https://www.youtube.com/watch?v=${id}`,
-    ], { timeout: 15000 });
-    const d = JSON.parse(stdout.trim());
+    const yt   = await getInnertube();
+    const info = await yt.getInfo(id);
+    const b    = info.basic_info;
+
     const track = {
       id,
-      title:     d.title,
-      artist:    d.uploader || d.channel || 'Unknown',
-      duration:  d.duration || 0,
-      thumbnail: d.thumbnail,
+      title:     b?.title    || 'Unknown',
+      artist:    b?.author   || 'Unknown',
+      duration:  b?.duration || 0,
+      thumbnail: b?.thumbnail?.[0]?.url || '',
     };
-    query(`INSERT INTO tracks (youtube_id,title,artist,duration,thumbnail_url)
-      VALUES ($1,$2,$3,$4,$5) ON CONFLICT (youtube_id) DO UPDATE SET updated_at=NOW()`,
-      [id, track.title, track.artist, track.duration, track.thumbnail]).catch(()=>{});
+
+    query(
+      `INSERT INTO tracks (youtube_id,title,artist,duration,thumbnail_url)
+       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (youtube_id) DO UPDATE SET updated_at=NOW()`,
+      [id, track.title, track.artist, track.duration, track.thumbnail]
+    ).catch(() => {});
+
     await cacheSet(`info:v6:${id}`, track, 3600);
     res.json(track);
   } catch (err) {
+    console.error(`getInfo error [${id}]:`, err.message);
     res.status(500).json({ error: 'Failed to get info' });
   }
 }

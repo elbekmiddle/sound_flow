@@ -36,6 +36,7 @@
     "redis": "^4.6.10",
     "socket.io": "^4.8.3",
     "uuid": "^9.0.1",
+    "youtubei.js": "^17.0.1",
     "yt-search": "^2.10.4"
   },
   "devDependencies": {

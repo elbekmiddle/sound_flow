@@ -192,10 +192,13 @@ export async function stream(req, res) {
   } catch { /* metadata is optional, continue streaming */ }
 
   // Set response headers
+  const origin = req.headers.origin || '*';
   res.setHeader('Content-Type', 'audio/webm');
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Vary', 'Origin');
   if (title)    res.setHeader('X-Track-Title',    encodeURIComponent(title));
   if (uploader) res.setHeader('X-Track-Artist',   encodeURIComponent(uploader));
   if (duration) res.setHeader('X-Track-Duration', duration);

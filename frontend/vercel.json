@@ -16,6 +16,6 @@
     }
   ],
   "env": {
-    "VITE_API_URL": "https://YOUR_BACKEND_URL"
+    "VITE_API_URL": "https://sound-flow-s7jf.onrender.com"
   }
 }

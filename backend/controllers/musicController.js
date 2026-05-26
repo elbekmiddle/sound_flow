@@ -9,11 +9,26 @@ import { query }              from '../config/database.js';
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 const execFileAsync = promisify(execFile);
 
 // Check if local yt-dlp exists (for Render), otherwise use global
 const YTDLP_BIN = fs.existsSync(path.resolve('./yt-dlp')) ? path.resolve('./yt-dlp') : 'yt-dlp';
+
+// Write YouTube cookies from env var to a temp file (once at startup)
+let COOKIE_FILE = null;
+if (process.env.YOUTUBE_COOKIES) {
+  COOKIE_FILE = path.join(os.tmpdir(), 'yt_cookies.txt');
+  fs.writeFileSync(COOKIE_FILE, process.env.YOUTUBE_COOKIES, 'utf-8');
+  console.log('🍪 YouTube cookies loaded from env');
+}
+
+// Build base yt-dlp args (with cookies if available)
+const ytdlpBaseArgs = () => [
+  ...(COOKIE_FILE ? ['--cookies', COOKIE_FILE] : []),
+  '--extractor-args', 'youtube:player_client=android,ios',
+];
 
 let _ytSearch;
 async function ytSearch(opts) {
@@ -45,11 +60,10 @@ async function getAudioUrl(videoId) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   try {
     const { stdout } = await execFileAsync(YTDLP_BIN, [
-      '--no-playlist',
-      '--no-warnings',
+      ...ytdlpBaseArgs(),
+      '--no-playlist', '--no-warnings',
       '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio',
-      '--get-url',
-      '--get-filename',
+      '--get-url', '--get-filename',
       '-o', '%(title)s|||%(uploader)s|||%(duration)s|||%(thumbnail)s',
       url,
     ], { timeout: 20000 });
@@ -166,8 +180,8 @@ export async function stream(req, res) {
       ({ title, uploader, duration } = cached);
     } else {
       const { stdout: metaOut } = await execFileAsync(YTDLP_BIN, [
-        '--quiet', '--no-warnings', '--no-playlist', '--rm-cache-dir',
-        '--extractor-args', 'youtube:player_client=android,ios',
+        ...ytdlpBaseArgs(),
+        '--quiet', '--no-warnings', '--no-playlist',
         '--print', '%(title)s\n%(uploader)s\n%(duration)s',
         ytUrl,
       ], { timeout: 12000 });
@@ -188,11 +202,8 @@ export async function stream(req, res) {
 
   // Spawn yt-dlp and pipe audio directly to response
   const ytdlpArgs = [
-    '--quiet',
-    '--no-warnings',
-    '--no-playlist',
-    '--rm-cache-dir',
-    '--extractor-args', 'youtube:player_client=android,ios',
+    ...ytdlpBaseArgs(),
+    '--quiet', '--no-warnings', '--no-playlist',
     '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*',
     '-o', '-',
     ytUrl,
@@ -240,8 +251,8 @@ export async function getInfo(req, res) {
   if (cached) return res.json(cached);
   try {
     const { stdout } = await execFileAsync(YTDLP_BIN, [
-      '--no-playlist', '--no-warnings', '--rm-cache-dir',
-      '--extractor-args', 'youtube:player_client=android,ios',
+      ...ytdlpBaseArgs(),
+      '--no-playlist', '--no-warnings',
       '-j', `https://www.youtube.com/watch?v=${id}`,
     ], { timeout: 15000 });
     const d = JSON.parse(stdout.trim());

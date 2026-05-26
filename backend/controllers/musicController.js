@@ -22,6 +22,9 @@ if (process.env.YOUTUBE_COOKIES) {
   COOKIE_FILE = path.join(os.tmpdir(), 'yt_cookies.txt');
   fs.writeFileSync(COOKIE_FILE, process.env.YOUTUBE_COOKIES, 'utf-8');
   console.log('🍪 YouTube cookies loaded from env');
+} else if (fs.existsSync(path.resolve('./cookies.txt'))) {
+  COOKIE_FILE = path.resolve('./cookies.txt');
+  console.log('🍪 YouTube cookies loaded from local file');
 }
 
 // Build base yt-dlp args (with cookies if available)

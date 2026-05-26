@@ -48,8 +48,8 @@ async function createSession(res, req, userId, email) {
 
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: true, // Required for SameSite: 'none'
+    sameSite: 'none', // Required for cross-origin cookies (Vercel <-> Render)
     maxAge: 30 * 24 * 3600 * 1000 // 30 days
   });
 
@@ -152,13 +152,13 @@ export async function refresh(req, res) {
 
     const session = result.rows[0];
     if (!session || session.is_revoked || !session.is_active || new Date(session.expires_at) < new Date()) {
-      res.clearCookie('refreshToken');
+      res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
       return res.status(401).json({ error: 'Session invalid or expired' });
     }
 
     const valid = await bcrypt.compare(refreshToken, session.refresh_token_hash);
     if (!valid) {
-      res.clearCookie('refreshToken');
+      res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
 
@@ -168,7 +168,7 @@ export async function refresh(req, res) {
     const newToken = makeAccessToken(session.user_id, session.email);
     res.json({ token: newToken });
   } catch (error) {
-    res.clearCookie('refreshToken');
+    res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
     return res.status(401).json({ error: 'Invalid or expired refresh token' });
   }
 }
@@ -183,7 +183,7 @@ export async function logout(req, res) {
     } catch (e) {
       // ignore invalid token on logout
     }
-    res.clearCookie('refreshToken');
+    res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
   }
   res.json({ message: 'Logged out successfully' });
 }

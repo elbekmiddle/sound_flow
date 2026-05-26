@@ -10,7 +10,8 @@
     "db:migrate": "node utils/migrate.js",
     "db:seed": "node utils/seed.js",
     "predev": "node utils/migrate.js",
-    "prestart": "node utils/migrate.js"
+    "prestart": "node utils/migrate.js",
+    "postinstall": "bash render-build.sh"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.14.4",

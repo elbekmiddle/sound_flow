@@ -7,7 +7,13 @@ import { promisify }       from 'util';
 import { cacheGet, cacheSet } from '../config/redis.js';
 import { query }              from '../config/database.js';
 
+import fs from 'fs';
+import path from 'path';
+
 const execFileAsync = promisify(execFile);
+
+// Check if local yt-dlp exists (for Render), otherwise use global
+const YTDLP_BIN = fs.existsSync(path.resolve('./yt-dlp')) ? path.resolve('./yt-dlp') : 'yt-dlp';
 
 let _ytSearch;
 async function ytSearch(opts) {
@@ -38,7 +44,7 @@ const mapVideo = v => ({
 async function getAudioUrl(videoId) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   try {
-    const { stdout } = await execFileAsync('yt-dlp', [
+    const { stdout } = await execFileAsync(YTDLP_BIN, [
       '--no-playlist',
       '--no-warnings',
       '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio',
@@ -159,7 +165,7 @@ export async function stream(req, res) {
     if (cached) {
       ({ title, uploader, duration } = cached);
     } else {
-      const { stdout: metaOut } = await execFileAsync('yt-dlp', [
+      const { stdout: metaOut } = await execFileAsync(YTDLP_BIN, [
         '--quiet', '--no-warnings', '--no-playlist',
         '--print', '%(title)s\n%(uploader)s\n%(duration)s',
         ytUrl,
@@ -190,7 +196,7 @@ export async function stream(req, res) {
   ];
 
   console.log(`🎵 Streaming: ${id}`);
-  const ytdlp = spawn('yt-dlp', ytdlpArgs);
+  const ytdlp = spawn(YTDLP_BIN, ytdlpArgs);
 
   let headersSent = false;
   ytdlp.stdout.once('data', () => {
@@ -230,7 +236,7 @@ export async function getInfo(req, res) {
   const cached = await cacheGet(`info:v6:${id}`);
   if (cached) return res.json(cached);
   try {
-    const { stdout } = await execFileAsync('yt-dlp', [
+    const { stdout } = await execFileAsync(YTDLP_BIN, [
       '--no-playlist', '--no-warnings',
       '-j', `https://www.youtube.com/watch?v=${id}`,
     ], { timeout: 15000 });

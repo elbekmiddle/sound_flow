@@ -101,7 +101,8 @@ app.use('/api/history',  historyRoutes);
 app.use('/api/library',  libraryRoutes);
 app.use('/api/podcast',  podcastRoutes);
 
-app.get('/health', (_,res) => res.json({ status: 'ok', uptime: Math.round(process.uptime()), version: '4.0.0', online: onlineUsers }));
+app.get('/health', (_,res) => res.send('pong'));
+app.get('/api/health', (_,res) => res.send('pong'));
 app.get('/',       (_,res) => res.json({ name: 'Sound Flow API', version: '4.0.0' }));
 app.use((req, res) => res.status(404).json({ error: `${req.method} ${req.path} not found` }));
 app.use(errorHandler);

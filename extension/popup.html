@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Obsidian Audio</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 360px; background: #0e0e0e; color: #fff; font-family: 'Inter', sans-serif; }
+
+  .icon { font-family: 'Material Symbols Outlined'; font-size: 20px;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    user-select: none; line-height: 1; }
+  .icon.fill { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+  /* ── Layout ── */
+  #view-login  { display: flex; flex-direction: column; }
+  #view-player { display: none; flex-direction: column; }
+  #view-search { display: none; flex-direction: column; }
+
+  .show { display: flex !important; }
+
+  /* ── Header ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 10px; border-bottom: 1px solid rgba(72,72,71,0.2);
+  }
+  .logo { display: flex; align-items: center; gap: 8px; font-family: 'Manrope'; font-weight: 900;
+    font-size: 16px; letter-spacing: -0.03em; }
+  .logo .icon { color: #c799ff; font-size: 22px; }
+
+  /* ── Login ── */
+  .login-wrap { padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .field-label { font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.12em; color: #adaaaa; margin-bottom: 4px; }
+  .field-wrap { position: relative; }
+  .field-wrap .icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: #adaaaa; font-size: 18px; pointer-events: none; }
+  .input {
+    width: 100%; background: #262626; border: none; border-radius: 8px;
+    padding: 11px 12px 11px 40px; color: #fff; font-size: 13px; font-family: 'Inter';
+    outline: none; transition: background 0.15s;
+  }
+  .input:focus { background: #201f1f; }
+  .input::placeholder { color: #777575; }
+  .btn-primary {
+    width: 100%; background: #c799ff; color: #340064; font-family: 'Manrope';
+    font-weight: 800; font-size: 13px; padding: 12px; border: none; border-radius: 8px;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.02em;
+  }
+  .btn-primary:hover { background: #bc87fe; }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .login-footer { text-align: center; font-size: 12px; color: #adaaaa; }
+  .login-footer a { color: #c799ff; text-decoration: none; font-weight: 600; }
+  .err { color: #ff6e84; font-size: 11px; text-align: center; min-height: 16px; }
+
+  /* ── Player ── */
+  .now-playing-art {
+    width: 100%; aspect-ratio: 1; background: linear-gradient(135deg, rgba(199,153,255,0.2), #0a0a0a);
+    position: relative; overflow: hidden;
+  }
+  .now-playing-art img { width: 100%; height: 100%; object-fit: cover; }
+  .now-playing-art .placeholder {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  }
+  .now-playing-art .placeholder .icon { font-size: 72px; color: rgba(199,153,255,0.25); }
+  .track-info { padding: 16px 16px 8px; }
+  .track-name { font-family: 'Manrope'; font-weight: 800; font-size: 16px;
+    letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-artist { font-size: 12px; color: #adaaaa; margin-top: 2px; }
+  .progress-area { padding: 0 16px; margin-bottom: 6px; }
+  .progress-bar {
+    -webkit-appearance: none; width: 100%; height: 3px; background: #262626;
+    border-radius: 99px; cursor: pointer; outline: none; margin-bottom: 4px;
+  }
+  .progress-bar::-webkit-slider-runnable-track {
+    background: linear-gradient(to right, #c799ff var(--p, 0%), #262626 var(--p, 0%));
+    border-radius: 99px;
+  }
+  .progress-bar::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 10px; height: 10px; background: #c799ff;
+    border-radius: 50%; cursor: pointer; margin-top: -3.5px;
+  }
+  .time-row { display: flex; justify-content: space-between; font-size: 10px; color: #777575; }
+  .controls { display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 16px 12px; }
+  .ctrl-btn { background: none; border: none; color: #adaaaa; cursor: pointer;
+    padding: 6px; border-radius: 50%; transition: all 0.15s; display: flex; }
+  .ctrl-btn:hover { color: #fff; background: rgba(255,255,255,0.06); }
+  .ctrl-btn.active { color: #c799ff; }
+  .play-btn {
+    width: 44px; height: 44px; border-radius: 50%; background: #fff; border: none;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .play-btn:hover { transform: scale(1.06); }
+  .play-btn:active { transform: scale(0.95); }
+  .play-btn .icon { color: #0e0e0e; font-size: 24px; }
+
+  /* ── Nav tabs ── */
+  .nav-tabs { display: flex; border-top: 1px solid rgba(72,72,71,0.2); }
+  .nav-tab { flex: 1; background: none; border: none; color: #adaaaa; padding: 10px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+    transition: color 0.15s; font-size: 9px; }
+  .nav-tab:hover, .nav-tab.active { color: #c799ff; }
+  .nav-tab .icon { font-size: 20px; }
+
+  /* ── Search ── */
+  .search-area { padding: 12px 16px; }
+  .search-input-wrap { position: relative; }
+  .search-input-wrap .icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: #adaaaa; font-size: 18px; pointer-events: none; }
+  .search-input {
+    width: 100%; background: #1a1919; border: none; border-radius: 10px;
+    padding: 10px 12px 10px 40px; color: #fff; font-size: 13px; font-family: 'Inter';
+    outline: none; transition: background 0.15s;
+  }
+  .search-input:focus { background: #201f1f; }
+  .search-results { padding: 0 16px 12px; max-height: 300px; overflow-y: auto; }
+  .result-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0;
+    cursor: pointer; border-radius: 6px; transition: background 0.12s;
+  }
+  .result-row:hover { background: rgba(255,255,255,0.04); padding: 8px 6px; margin: 0 -6px; }
+  .result-thumb { width: 40px; height: 40px; border-radius: 6px; background: #1a1919;
+    flex-shrink: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .result-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .result-info { flex: 1; min-width: 0; }
+  .result-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  .result-artist { font-size: 11px; color: #adaaaa; }
+  .result-dur { font-size: 11px; color: #777575; flex-shrink: 0; }
+  .loading-dot { width: 6px; height: 6px; background: #c799ff; border-radius: 50%;
+    animation: dot-pulse 1.2s ease-in-out infinite; display: inline-block; }
+  @keyframes dot-pulse { 0%,80%,100% { opacity: 0; } 40% { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN VIEW ── -->
+<div id="view-login" class="show">
+  <div class="header">
+    <div class="logo">
+      <span class="icon fill">graphic_eq</span>
+      Obsidian
+    </div>
+  </div>
+  <div class="login-wrap">
+    <div>
+      <div class="field-label">Email</div>
+      <div class="field-wrap">
+        <span class="icon">mail</span>
+        <input id="login-email" class="input" type="email" placeholder="name@example.com"/>
+      </div>
+    </div>
+    <div>
+      <div class="field-label">Password</div>
+      <div class="field-wrap">
+        <span class="icon">lock</span>
+        <input id="login-password" class="input" type="password" placeholder="••••••••"/>
+      </div>
+    </div>
+    <div id="login-err" class="err"></div>
+    <button id="login-btn" class="btn-primary">Sign In</button>
+    <p class="login-footer">New user? <a href="http://localhost:5173/register" target="_blank">Sign up on web</a></p>
+  </div>
+</div>
+
+<!-- ── PLAYER VIEW ── -->
+<div id="view-player">
+  <div class="header">
+    <div class="logo">
+      <span class="icon fill">graphic_eq</span>
+      Obsidian
+    </div>
+    <button id="logout-btn" class="ctrl-btn" title="Sign out">
+      <span class="icon">logout</span>
+    </button>
+  </div>
+
+  <div class="now-playing-art" id="art-container">
+    <div class="placeholder"><span class="icon fill">album</span></div>
+  </div>
+
+  <div class="track-info">
+    <div class="track-name" id="track-name">Not playing</div>
+    <div class="track-artist" id="track-artist">Select a track to play</div>
+  </div>
+
+  <div class="progress-area">
+    <input type="range" class="progress-bar" id="progress-bar"
+      min="0" max="100" value="0" style="--p:0%"/>
+    <div class="time-row">
+      <span id="time-cur">0:00</span>
+      <span id="time-tot">0:00</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl-btn" id="shuffle-btn" title="Shuffle">
+      <span class="icon">shuffle</span>
+    </button>
+    <button class="ctrl-btn" id="prev-btn" title="Previous">
+      <span class="icon" style="font-size:26px">skip_previous</span>
+    </button>
+    <button class="play-btn" id="play-btn">
+      <span class="icon fill">play_arrow</span>
+    </button>
+    <button class="ctrl-btn" id="next-btn" title="Next">
+      <span class="icon" style="font-size:26px">skip_next</span>
+    </button>
+    <button class="ctrl-btn" id="like-btn" title="Like">
+      <span class="icon">favorite_border</span>
+    </button>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tab-home" onclick="switchTab('home')">
+      <span class="icon">home</span> Home
+    </button>
+    <button class="nav-tab" id="tab-search" onclick="switchTab('search')">
+      <span class="icon">search</span> Search
+    </button>
+    <button class="nav-tab" id="tab-queue" onclick="switchTab('queue')">
+      <span class="icon">queue_music</span> Queue
+    </button>
+  </div>
+</div>
+
+<!-- ── SEARCH VIEW ── -->
+<div id="view-search">
+  <div class="header">
+    <div class="logo">
+      <span class="icon fill">graphic_eq</span>
+      Obsidian
+    </div>
+    <button class="ctrl-btn" onclick="switchTab('home')">
+      <span class="icon">keyboard_arrow_left</span>
+    </button>
+  </div>
+  <div class="search-area">
+    <div class="search-input-wrap">
+      <span class="icon">search</span>
+      <input id="search-input" class="search-input" type="text"
+        placeholder="Search songs, artists..." autocomplete="off"/>
+    </div>
+  </div>
+  <div class="search-results" id="search-results"></div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

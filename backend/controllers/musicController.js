@@ -168,9 +168,9 @@ async function getAudioUrl(videoId) {
     url,
   ], { timeout: 25000 });
 
-  const lines = stdout.trim().split('\n').filter(Boolean);
-  const audioUrl = lines[lines.length - 1];
-  const meta     = lines.length >= 2 ? lines[lines.length - 2] : '';
+  const lines = stdout.trim().split('\n').filter(l => l && !l.startsWith('WARNING:'));
+  const audioUrl = lines[0];
+  const meta     = lines.length >= 2 ? lines[1] : '';
   const [title, uploader, duration] = meta.split('|||');
   return { audioUrl, title, uploader, duration };
 }
@@ -184,7 +184,7 @@ export async function stream(req, res) {
   const ytUrl = `https://www.youtube.com/watch?v=${id}`;
   
   // 1. Check cached URL
-  const urlCacheKey = `audio_url:v5:${id}`;
+  const urlCacheKey = `audio_url:v6:${id}`;
   const cachedUrl = await cacheGet(urlCacheKey);
   if (cachedUrl?.url) {
     console.log(`🎵 Stream [cache redirect] → ${id}`);

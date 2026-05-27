@@ -4,8 +4,14 @@ import { socket } from '../api/socket.js';
 import toast from 'react-hot-toast';
 
 let audioEl = null;
+let historyLogged = false; // track if 30% threshold logged for current track
+
 function audio() {
-  if (!audioEl) { audioEl = new Audio(); audioEl.preload = 'metadata'; }
+  if (!audioEl) {
+    audioEl = new Audio();
+    audioEl.preload = 'metadata';
+    audioEl.crossOrigin = 'anonymous'; // required for redirect streams (Piped/CDN)
+  }
   return audioEl;
 }
 
@@ -27,9 +33,29 @@ const usePlayerStore = create((set, get) => ({
     const a = audio();
     a.ontimeupdate = () => {
       if (!a.duration) return;
-      set({ currentTime: a.currentTime, duration: a.duration, progress: (a.currentTime / a.duration) * 100 });
+      const pct = (a.currentTime / a.duration) * 100;
+      set({ currentTime: a.currentTime, duration: a.duration, progress: pct });
+
+      // Log history at 30% completion (Spotify standard)
+      if (!historyLogged && pct >= 30) {
+        historyLogged = true;
+        const track = get().currentTrack;
+        if (track) {
+          historyApi.add({
+            youtubeId:     track.id,
+            title:         track.title,
+            artist:        track.artist,
+            duration:      track.duration,
+            thumbnail:     track.thumbnail,
+            deviceType:    'web',
+            playDuration:  Math.floor(a.currentTime),
+            completionPct: Math.floor(pct),
+          }).catch(() => {});
+        }
+      }
     };
     a.onended = () => {
+      historyLogged = false; // reset for next track
       const { repeat, queue, queueIndex } = get();
       if (repeat === 'one') { a.currentTime = 0; a.play(); }
       else if (repeat === 'all' || queueIndex < queue.length - 1) get().next();
@@ -44,6 +70,10 @@ const usePlayerStore = create((set, get) => ({
     const a = audio();
     if (get().currentTrack?.id === track.id && a.src) return get().togglePlay();
     const idx = startIdx ?? Math.max(queue.findIndex(t => t.id === track.id), 0);
+
+    // Reset completion tracker for new track
+    historyLogged = false;
+
     set({ currentTrack: track, queue, queueIndex: idx, isLoading: true, isPlaying: false, progress: 0, currentTime: 0 });
     a.src = musicApi.streamUrl(track.id);
     a.volume = get().volume;
@@ -57,12 +87,15 @@ const usePlayerStore = create((set, get) => ({
           artist: track.artist, thumbnail: track.thumbnail,
         });
       }
-      // Preload next
+      // Preload next track metadata (no full download)
       const ni = (idx + 1) % Math.max(queue.length, 1);
-      if (queue[ni]?.id !== track.id) {
-        const pre = new Audio(); pre.preload = 'metadata'; pre.src = musicApi.streamUrl(queue[ni].id);
+      if (queue[ni] && queue[ni].id !== track.id) {
+        const pre = new Audio();
+        pre.preload = 'metadata';
+        pre.crossOrigin = 'anonymous';
+        pre.src = musicApi.streamUrl(queue[ni].id);
       }
-      historyApi.add({ youtubeId: track.id, title: track.title, artist: track.artist, duration: track.duration, thumbnail: track.thumbnail, deviceType: 'web' }).catch(() => {});
+      // Note: history is now logged at 30% via ontimeupdate (Spotify standard)
     } catch { set({ isLoading: false, isPlaying: false }); }
   },
 

@@ -130,6 +130,12 @@ const AUTO_MIGRATE = `
     last_active TIMESTAMPTZ DEFAULT NOW(),
     is_revoked BOOLEAN DEFAULT FALSE
   );
+
+  -- Play history: add completion tracking (Spotify standard)
+  ALTER TABLE play_history ADD COLUMN IF NOT EXISTS completion_pct SMALLINT DEFAULT 0;
+  CREATE INDEX IF NOT EXISTS idx_ph_user_date ON play_history(user_id, played_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_ph_completed ON play_history(user_id, played_at DESC)
+    WHERE completion_pct >= 30;
 `;
 
 async function bootstrap() {

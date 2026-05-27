@@ -156,6 +156,25 @@ export async function getRecommendations(req, res) {
   } catch { res.json([]); }
 }
 
+// ── Get Audio URL (for redirect) ──────────────────────────────────────────
+async function getAudioUrl(videoId) {
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const { stdout } = await execFileAsync(YTDLP_BIN, [
+    ...ytdlpBaseArgs(),
+    '--no-playlist', '--no-warnings',
+    '-f', 'bestaudio/best',
+    '--get-url', '--get-filename',
+    '-o', '%(title)s|||%(uploader)s|||%(duration)s',
+    url,
+  ], { timeout: 25000 });
+
+  const lines = stdout.trim().split('\n').filter(Boolean);
+  const audioUrl = lines[lines.length - 1];
+  const meta     = lines.length >= 2 ? lines[lines.length - 2] : '';
+  const [title, uploader, duration] = meta.split('|||');
+  return { audioUrl, title, uploader, duration };
+}
+
 // ── Stream ────────────────────────────────────────────────────────────────
 export async function stream(req, res) {
   const { id } = req.query;
@@ -163,26 +182,41 @@ export async function stream(req, res) {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) return res.status(400).json({ error: 'Invalid ID' });
 
   const ytUrl = `https://www.youtube.com/watch?v=${id}`;
+  
+  // 1. Check cached URL
+  const urlCacheKey = `audio_url:v5:${id}`;
+  const cachedUrl = await cacheGet(urlCacheKey);
+  if (cachedUrl?.url) {
+    console.log(`🎵 Stream [cache redirect] → ${id}`);
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    return res.redirect(302, cachedUrl.url);
+  }
 
-  // Fetch metadata for headers (cached)
+  // 2. Fetch new URL and redirect
+  try {
+    const { audioUrl, title, uploader, duration } = await getAudioUrl(id);
+    console.log(`🎵 Stream [yt-dlp redirect] → ${id}`);
+    // YouTube URLs expire in ~6 hours, cache for 5 hours
+    await cacheSet(urlCacheKey, { url: audioUrl }, 3600 * 5);
+    
+    // Also cache metadata for getInfo / next stream calls
+    if (title) await cacheSet(`meta:v3:${id}`, { title, uploader, duration }, 3600 * 6);
+    
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    return res.redirect(302, audioUrl);
+  } catch (err) {
+    console.warn(`⚠️  yt-dlp URL fetch failed for ${id}, falling back to direct pipe:`, err.message);
+  }
+
+  // 3. Fallback: direct pipe (legacy mode if URL extraction fails)
   const metaKey = `meta:v3:${id}`;
   let title = '', uploader = '', duration = '';
   try {
     const cached = await cacheGet(metaKey);
-    if (cached) {
-      ({ title, uploader, duration } = cached);
-    } else {
-      const { stdout: metaOut } = await execFileAsync(YTDLP_BIN, [
-        ...ytdlpBaseArgs(),
-        '--quiet', '--no-warnings', '--no-playlist',
-        '--print', '%(title)s\n%(uploader)s\n%(duration)s',
-        ytUrl,
-      ], { timeout: 12000 });
-      const [t, u, d] = metaOut.trim().split('\n');
-      title = t || ''; uploader = u || ''; duration = d || '';
-      await cacheSet(metaKey, { title, uploader, duration }, 3600 * 6);
-    }
-  } catch { /* metadata is optional, continue streaming */ }
+    if (cached) ({ title, uploader, duration } = cached);
+  } catch {}
 
   // Set response headers
   const origin = req.headers.origin || '*';
@@ -196,7 +230,6 @@ export async function stream(req, res) {
   if (uploader) res.setHeader('X-Track-Artist',   encodeURIComponent(uploader));
   if (duration) res.setHeader('X-Track-Duration', duration);
 
-  // Spawn yt-dlp and pipe audio directly to response
   const ytdlpArgs = [
     ...ytdlpBaseArgs(),
     '--quiet', '--no-warnings', '--no-playlist',
@@ -205,33 +238,20 @@ export async function stream(req, res) {
     ytUrl,
   ];
 
-  console.log(`🎵 Streaming: ${id}`);
+  console.log(`🎵 Stream [fallback pipe]: ${id}`);
   const ytdlp = spawn(YTDLP_BIN, ytdlpArgs);
-
-  let headersSent = false;
-  ytdlp.stdout.once('data', () => {
-    if (!headersSent) { headersSent = true; }
-  });
 
   ytdlp.stdout.pipe(res);
 
   ytdlp.stderr.on('data', (chunk) => {
     const msg = chunk.toString().trim();
-    if (msg && !msg.startsWith('[download]')) {
-      console.error(`yt-dlp [${id}]:`, msg);
-    }
+    if (msg && !msg.startsWith('[download]')) console.error(`yt-dlp [${id}]:`, msg);
   });
 
   ytdlp.on('close', (code) => {
     if (code !== 0 && code !== null && !res.writableEnded) {
-      console.error(`yt-dlp exited with code ${code} for ${id}`);
       if (!res.headersSent) res.status(451).json({ error: 'Video cannot be streamed' });
     }
-  });
-
-  ytdlp.on('error', (err) => {
-    console.error('yt-dlp spawn error:', err.message);
-    if (!res.headersSent) res.status(500).end();
   });
 
   req.on('close', () => {

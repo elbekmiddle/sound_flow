@@ -6,8 +6,15 @@ export async function connectRedis() {
   client = createClient({
     url: process.env.REDIS_URL || 'redis://localhost:6379',
     socket: {
-      reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
+      tls: process.env.REDIS_URL?.startsWith('rediss://'),
+      reconnectStrategy: (retries) => {
+        if (retries > 20) return new Error('Redis: too many retries');
+        return Math.min(retries * 200, 5000);
+      },
+      connectTimeout: 10000,
+      keepAlive: 5000,
     },
+    pingInterval: 30000, // Prevent Upstash idle disconnect
   });
 
   client.on('error', (err) => console.error('Redis error:', err));
@@ -51,8 +58,13 @@ export async function cacheDel(key) {
 
 export async function cacheDelPattern(pattern) {
   try {
-    const keys = await getRedis().keys(pattern);
-    if (keys.length > 0) await getRedis().del(keys);
+    const redis = getRedis();
+    let cursor = 0;
+    do {
+      const result = await redis.scan(cursor, { MATCH: pattern, COUNT: 100 });
+      cursor = result.cursor;
+      if (result.keys.length > 0) await redis.del(result.keys);
+    } while (cursor !== 0);
   } catch (e) {
     console.warn('Cache del pattern failed:', e.message);
   }

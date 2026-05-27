@@ -10,8 +10,7 @@ export const SocketProvider = ({ children }) => {
   const [friendActivity, setFriendActivity] = useState([]);
 
   useEffect(() => {
-    // Connect with current token
-    connectSocket(getToken());
+    // Connection is managed by authStore.js
 
     const onConnect    = () => { setConnected(true);  };
     const onDisconnect = () => { setConnected(false); };

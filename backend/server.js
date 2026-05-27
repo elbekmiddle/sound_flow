@@ -7,8 +7,10 @@ import helmet      from 'helmet';
 import compression from 'compression';
 import morgan      from 'morgan';
 import rateLimit   from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
 import cookieParser from 'cookie-parser';
 import useragent    from 'express-useragent';
+import jwt         from 'jsonwebtoken';
 
 import authRoutes     from './routes/auth.js';
 import musicRoutes    from './routes/music.js';
@@ -19,7 +21,7 @@ import podcastRoutes  from './routes/podcast.js';
 
 import { errorHandler }  from './middleware/errorHandler.js';
 import { connectDB }     from './config/database.js';
-import { connectRedis }  from './config/redis.js';
+import { connectRedis, getRedis }  from './config/redis.js';
 
 const app    = express();
 const server = http.createServer(app);
@@ -29,45 +31,69 @@ const PORT   = process.env.PORT || 5000;
 export const io = new Server(server, {
   cors: { origin: true, credentials: true, methods: ['GET', 'POST'] },
   transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  pingTimeout: parseInt(process.env.SOCKET_PING_TIMEOUT) || 60000,
+  pingInterval: parseInt(process.env.SOCKET_PING_INTERVAL) || 25000,
 });
 
-let onlineUsers = 0;
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || 
+                socket.handshake.headers?.authorization?.split(' ')[1];
+  if (!token) return next(new Error('Authentication required'));
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId;
+    next();
+  } catch {
+    next(new Error('Invalid token'));
+  }
+});
 
-io.on('connection', (socket) => {
-  onlineUsers++;
-  io.emit('user_count', { count: onlineUsers });
-  console.log(`🔌 WS connected: ${socket.id} | online: ${onlineUsers}`);
+io.on('connection', async (socket) => {
+  const redis = getRedis();
+  let onlineUsers = 0;
+  try {
+    onlineUsers = await redis.incr('online:users');
+  } catch (e) {
+    console.warn('Redis incr failed:', e.message);
+  }
+  io.emit('user_count', { count: Math.max(0, onlineUsers) });
+  console.log(`🔌 WS connected: ${socket.id} | User: ${socket.userId}`);
 
   // Client broadcasts what track they are playing
   socket.on('now_playing', (data) => {
     socket.broadcast.emit('friend_playing', {
       socketId: socket.id,
+      userId: socket.userId,
       ...data,
     });
   });
 
   // Simple chat message relay
   socket.on('chat_message', (data) => {
-    io.emit('chat_message', { socketId: socket.id, ...data, ts: Date.now() });
+    io.emit('chat_message', { socketId: socket.id, userId: socket.userId, ...data, ts: Date.now() });
   });
 
   // Join a playlist room for collaborative listening
-  socket.on('join_room', (roomId) => {
+  socket.on('join_room', async (roomId) => {
     socket.join(roomId);
-    socket.to(roomId).emit('peer_joined', { socketId: socket.id });
+    try {
+      const sockets = await io.in(roomId).fetchSockets();
+      const members = sockets.map(s => ({ socketId: s.id, userId: s.userId }));
+      io.to(roomId).emit('room_members', { roomId, members });
+    } catch {}
+    socket.to(roomId).emit('peer_joined', { socketId: socket.id, userId: socket.userId });
   });
 
   socket.on('leave_room', (roomId) => {
     socket.leave(roomId);
-    socket.to(roomId).emit('peer_left', { socketId: socket.id });
+    socket.to(roomId).emit('peer_left', { socketId: socket.id, userId: socket.userId });
   });
 
-  socket.on('disconnect', () => {
-    onlineUsers = Math.max(0, onlineUsers - 1);
-    io.emit('user_count', { count: onlineUsers });
-    console.log(`🔌 WS disconnected: ${socket.id} | online: ${onlineUsers}`);
+  socket.on('disconnect', async () => {
+    let count = 0;
+    try { count = await redis.decr('online:users'); } catch {}
+    io.emit('user_count', { count: Math.max(0, count) });
+    console.log(`🔌 WS disconnected: ${socket.id} | online: ${Math.max(0, count)}`);
   });
 });
 
@@ -87,10 +113,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(useragent.express());
 
-const limiter = rateLimit({ windowMs: 15*60*1000, max: 500, standardHeaders: true, legacyHeaders: false,
-  handler: (_,res) => res.status(429).json({ error: 'Too many requests' }) });
-const streamLimiter = rateLimit({ windowMs: 60*1000, max: 60,
-  handler: (_,res) => res.status(429).json({ error: 'Stream rate limit exceeded' }) });
+const limiter = rateLimit({ 
+  windowMs: 15*60*1000, 
+  max: 500, 
+  standardHeaders: true, 
+  legacyHeaders: false,
+  store: new RedisStore({
+    sendCommand: (...args) => getRedis().sendCommand(args),
+  }),
+  handler: (_,res) => res.status(429).json({ error: 'Too many requests' }) 
+});
+const streamLimiter = rateLimit({ 
+  windowMs: 60*1000, 
+  max: 60,
+  store: new RedisStore({
+    sendCommand: (...args) => getRedis().sendCommand(args),
+  }),
+  handler: (_,res) => res.status(429).json({ error: 'Stream rate limit exceeded' }) 
+});
 app.use('/api/', limiter);
 app.use('/api/music/stream', streamLimiter);
 
@@ -133,9 +173,15 @@ const AUTO_MIGRATE = `
 
   -- Play history: add completion tracking (Spotify standard)
   ALTER TABLE play_history ADD COLUMN IF NOT EXISTS completion_pct SMALLINT DEFAULT 0;
+  
+  -- Database Performance Indexes for 1000+ users
   CREATE INDEX IF NOT EXISTS idx_ph_user_date ON play_history(user_id, played_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ph_completed ON play_history(user_id, played_at DESC)
     WHERE completion_pct >= 30;
+  CREATE INDEX IF NOT EXISTS idx_playlist_tracks_pid_pos ON playlist_tracks(playlist_id, position);
+  CREATE INDEX IF NOT EXISTS idx_liked_tracks_user_liked ON liked_tracks(user_id, liked_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_search_history_recent ON search_history(user_id, searched_at DESC) 
+    WHERE searched_at > NOW() - INTERVAL '30 days';
 `;
 
 async function bootstrap() {

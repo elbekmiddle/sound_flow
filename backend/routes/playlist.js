@@ -122,16 +122,14 @@ router.post('/:id/tracks', asyncHandler(async (req, res) => {
 
   const trackId = trackResult.rows[0].id;
 
-  // Get next position
-  const posResult = await query(
-    'SELECT COALESCE(MAX(position), 0) + 1 AS next_pos FROM playlist_tracks WHERE playlist_id = $1',
-    [req.params.id]
-  );
-
+  // Insert track atomically to avoid race conditions
   await query(
     `INSERT INTO playlist_tracks (playlist_id, track_id, position)
-     VALUES ($1, $2, $3) ON CONFLICT (playlist_id, track_id) DO NOTHING`,
-    [req.params.id, trackId, posResult.rows[0].next_pos]
+     VALUES ($1, $2, (
+       SELECT COALESCE(MAX(position), 0) + 1 FROM playlist_tracks WHERE playlist_id = $1
+     ))
+     ON CONFLICT (playlist_id, track_id) DO NOTHING`,
+    [req.params.id, trackId]
   );
 
   await cacheDel(`playlists:${req.userId}`);

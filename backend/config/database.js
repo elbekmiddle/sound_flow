@@ -10,10 +10,17 @@ export async function connectDB() {
     ssl: process.env.NODE_ENV === 'production'
       ? { rejectUnauthorized: false }
       : false,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    max: 50,
+    min: 5,
+    idleTimeoutMillis: 60000,
+    connectionTimeoutMillis: 10000,
+    statement_timeout: 30000,
+    query_timeout: 30000,
+    application_name: 'soundflow-api',
   });
+
+  pool.on('error', (err) => console.error('PG pool error:', err));
+  pool.on('connect', () => console.log('PG new client connected'));
 
   // Test connection
   const client = await pool.connect();

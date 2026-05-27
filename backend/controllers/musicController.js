@@ -42,10 +42,11 @@ if (process.env.YOUTUBE_COOKIES) {
 
 // Build base yt-dlp args (with cookies + strong bot-bypass settings)
 const ytdlpBaseArgs = () => [
+  '-4',                                                          // Force IPv4 (avoid IPv6 rate-limits on cloud)
   ...(COOKIE_FILE ? ['--cookies', COOKIE_FILE] : []),
-  '--extractor-args', 'youtube:player_client=ios,tv_embedded,android',
+  '--extractor-args', 'youtube:player_client=tv_embedded,android',
   '--no-check-certificates',
-  '--user-agent', 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
+  '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
 ];
 
 let _ytSearch;

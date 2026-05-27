@@ -78,8 +78,8 @@ app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(cors({ origin: true, credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept'],
-  exposedHeaders: ['Content-Range','Accept-Ranges','X-Track-Title'],
+  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept','Range'],
+  exposedHeaders: ['Content-Range','Accept-Ranges','Content-Length','X-Track-Title','X-Track-Artist','X-Track-Duration'],
   maxAge: 86400 }));
 app.options('*', cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));

@@ -43,10 +43,9 @@ if (process.env.YOUTUBE_COOKIES) {
 // Build base yt-dlp args (with cookies + strong bot-bypass settings)
 const ytdlpBaseArgs = () => [
   ...(COOKIE_FILE ? ['--cookies', COOKIE_FILE] : []),
-  '--extractor-args', 'youtube:player_client=tv_embedded,android,web_creator;po_token=web_safari+undefined',
+  '--extractor-args', 'youtube:player_client=ios,tv_embedded,android',
   '--no-check-certificates',
-  '--sleep-requests', '0.5',
-  '--user-agent', 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+  '--user-agent', 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
 ];
 
 let _ytSearch;

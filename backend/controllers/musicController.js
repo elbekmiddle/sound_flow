@@ -17,21 +17,36 @@ const execFileAsync = promisify(execFile);
 const YTDLP_BIN = fs.existsSync(path.resolve('./yt-dlp')) ? path.resolve('./yt-dlp') : 'yt-dlp';
 
 // Write YouTube cookies from env var to a temp file (once at startup)
+// Supports both plain Netscape cookie format and base64-encoded string
 let COOKIE_FILE = null;
 if (process.env.YOUTUBE_COOKIES) {
   COOKIE_FILE = path.join(os.tmpdir(), 'yt_cookies.txt');
-  fs.writeFileSync(COOKIE_FILE, process.env.YOUTUBE_COOKIES, 'utf-8');
-  console.log('🍪 YouTube cookies loaded from env');
+  let cookieContent = process.env.YOUTUBE_COOKIES.trim();
+  // Detect base64: Netscape cookie files always start with '#'
+  if (!cookieContent.startsWith('#') && !cookieContent.startsWith('.') && !cookieContent.includes('\t')) {
+    try {
+      cookieContent = Buffer.from(cookieContent, 'base64').toString('utf-8');
+      console.log('🍪 YouTube cookies decoded from base64');
+    } catch {
+      console.warn('⚠️  Cookie base64 decode failed, using raw value');
+    }
+  }
+  fs.writeFileSync(COOKIE_FILE, cookieContent, 'utf-8');
+  console.log('🍪 YouTube cookies loaded from env →', COOKIE_FILE);
 } else if (fs.existsSync(path.resolve('./cookies.txt'))) {
   COOKIE_FILE = path.resolve('./cookies.txt');
   console.log('🍪 YouTube cookies loaded from local file');
+} else {
+  console.warn('⚠️  No YouTube cookies found — bot detection may block streams on cloud');
 }
 
-// Build base yt-dlp args (with cookies if available)
+// Build base yt-dlp args (with cookies + strong bot-bypass settings)
 const ytdlpBaseArgs = () => [
   ...(COOKIE_FILE ? ['--cookies', COOKIE_FILE] : []),
-  '--extractor-args', 'youtube:player_client=tv_embedded,android_vr,web_creator',
+  '--extractor-args', 'youtube:player_client=tv_embedded,android,web_creator;po_token=web_safari+undefined',
   '--no-check-certificates',
+  '--sleep-requests', '0.5',
+  '--user-agent', 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
 ];
 
 let _ytSearch;

@@ -1,3 +1,4 @@
 /node_modules
-.envcookies.txt
+.env
 cookies.txt
+render_cookie_value.txt
